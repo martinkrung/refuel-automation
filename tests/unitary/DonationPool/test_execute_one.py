@@ -40,4 +40,4 @@ def test_execute_one_sends_tokens_and_reward(donation_pool, mock_pool, tokens, d
     assert token1.balanceOf(mock_pool.address) == amounts[1] // n_periods
 
     stream = donation_pool.streams(0)
-    assert stream[3] == n_periods - 1
+    assert stream[4] == n_periods - 1

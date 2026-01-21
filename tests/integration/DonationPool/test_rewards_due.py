@@ -13,9 +13,9 @@ def _fund_and_approve(token, owner, spender, amount):
 
 def _due_periods(stream, now, zero_address):
     donor = stream[0]
-    period_length = stream[2]
-    periods_remaining = stream[3]
-    next_ts = stream[4]
+    period_length = stream[3]
+    periods_remaining = stream[4]
+    next_ts = stream[5]
 
     if donor == zero_address:
         return 0
@@ -59,6 +59,6 @@ def test_rewards_due_matches_periods(donation_pool, tokens, donor):
     for i in range(2):
         stream_id = due_ids[len(due_ids) - 1 - i]
         stream = donation_pool.streams(stream_id)
-        expected.append(stream[5] * _due_periods(stream, now, zero_address))
+        expected.append(stream[6] * _due_periods(stream, now, zero_address))
 
     assert rewards_due == expected

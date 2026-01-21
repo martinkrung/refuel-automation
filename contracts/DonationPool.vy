@@ -43,6 +43,7 @@ event StreamCancelled:
 struct DonationStream:
     donor: address
     amounts_remaining: uint256[N_COINS]
+    amounts_per_period: uint256[N_COINS]
     period_length: uint256
     periods_remaining: uint256
     next_ts: uint256
@@ -88,9 +89,12 @@ def create_stream(
     reward_total: uint256 = reward_per_period * n_periods
     assert msg.value == reward_total, "reward mismatch"
 
+    amounts_per_period: uint256[N_COINS] = empty(uint256[N_COINS])
     for i: uint256 in range(N_COINS):
-        if amounts[i] > 0:
-            assert extcall IERC20(coins[i]).transferFrom(msg.sender, self, amounts[i]), "transfer failed"
+        amount: uint256 = amounts[i]
+        if amount > 0:
+            assert extcall IERC20(coins[i]).transferFrom(msg.sender, self, amount), "transfer failed"
+        amounts_per_period[i] = amount // n_periods
 
     stream_id: uint256 = self.stream_count
     self.stream_count = stream_id + 1
@@ -98,6 +102,7 @@ def create_stream(
     stream: DonationStream = DonationStream(
         donor=msg.sender,
         amounts_remaining=amounts,
+        amounts_per_period=amounts_per_period,
         period_length=period_length,
         periods_remaining=n_periods,
         next_ts=block.timestamp + period_length,
@@ -158,11 +163,11 @@ def streams_due(n_max: uint256 = N_MAX_VIEW) -> DynArray[uint256, N_MAX_VIEW]:
     if count == 0:
         return due_ids
 
-    limit: uint256 = n_max
-    if limit == 0 or limit > N_MAX_VIEW:
+    limit: uint256 = count
+    if limit > N_MAX_VIEW:
         limit = N_MAX_VIEW
-    if limit > count:
-        limit = count
+    if n_max != 0 and n_max < limit:
+        limit = n_max
 
     for i: uint256 in range(limit, bound=N_MAX_VIEW):
         stream_id: uint256 = count - 1 - i
@@ -182,11 +187,11 @@ def rewards_due(
     rewards: DynArray[uint256, N_MAX_VIEW] = empty(DynArray[uint256, N_MAX_VIEW])
     count: uint256 = len(stream_ids)
 
-    limit: uint256 = n_max
-    if limit == 0 or limit > N_MAX_VIEW:
+    limit: uint256 = count
+    if limit > N_MAX_VIEW:
         limit = N_MAX_VIEW
-    if limit > count:
-        limit = count
+    if n_max != 0 and n_max < limit:
+        limit = n_max
 
     for i: uint256 in range(limit, bound=N_MAX_VIEW):
         stream_id: uint256 = stream_ids[count - 1 - i]
@@ -205,23 +210,22 @@ def _execute_streams(stream_ids: DynArray[uint256, MAX_BATCH]) -> (uint256, uint
     for i: uint256 in range(count, bound=MAX_BATCH):
         stream_id: uint256 = stream_ids[i]
         stream: DonationStream = self.streams[stream_id]
-        if stream.donor == empty(address):
-            continue
 
         periods_due: uint256 = self._due_periods(stream)
         if periods_due == 0:
             continue
 
         amounts_to_send: uint256[N_COINS] = empty(uint256[N_COINS])
-        if periods_due == stream.periods_remaining:
-            amounts_to_send = stream.amounts_remaining
-            stream.amounts_remaining = empty(uint256[N_COINS])
-        else:
-            for j: uint256 in range(N_COINS):
-                if stream.amounts_remaining[j] > 0:
-                    per_period: uint256 = stream.amounts_remaining[j] // stream.periods_remaining
-                    amounts_to_send[j] = per_period * periods_due
-                    stream.amounts_remaining[j] -= amounts_to_send[j]
+        for j: uint256 in range(N_COINS):
+            remaining: uint256 = stream.amounts_remaining[j]
+            if remaining == 0:
+                continue
+            per_period: uint256 = stream.amounts_per_period[j]
+            amount: uint256 = per_period * periods_due
+            if periods_due == stream.periods_remaining:
+                amount = remaining
+            amounts_to_send[j] = amount
+            stream.amounts_remaining[j] = remaining - amount
 
         stream.periods_remaining -= periods_due
         stream.next_ts += stream.period_length * periods_due
@@ -256,9 +260,8 @@ def _execute_streams(stream_ids: DynArray[uint256, MAX_BATCH]) -> (uint256, uint
     return executed, reward_total
 
 
-@external
-@nonreentrant
-def execute_many(stream_ids: DynArray[uint256, MAX_BATCH]) -> uint256:
+@internal
+def _execute_and_pay(stream_ids: DynArray[uint256, MAX_BATCH]) -> uint256:
     executed: uint256 = 0
     reward_total: uint256 = 0
     executed, reward_total = self._execute_streams(stream_ids)
@@ -267,6 +270,12 @@ def execute_many(stream_ids: DynArray[uint256, MAX_BATCH]) -> uint256:
         send(msg.sender, reward_total)
 
     return executed
+
+
+@external
+@nonreentrant
+def execute_many(stream_ids: DynArray[uint256, MAX_BATCH]) -> uint256:
+    return self._execute_and_pay(stream_ids)
 
 
 @external
@@ -275,14 +284,7 @@ def execute_one(stream_id: uint256) -> uint256:
     stream_ids: DynArray[uint256, MAX_BATCH] = empty(DynArray[uint256, MAX_BATCH])
     stream_ids.append(stream_id)
 
-    executed: uint256 = 0
-    reward_total: uint256 = 0
-    executed, reward_total = self._execute_streams(stream_ids)
-
-    if reward_total > 0:
-        send(msg.sender, reward_total)
-
-    return executed
+    return self._execute_and_pay(stream_ids)
 
 
 @external
@@ -294,12 +296,15 @@ def cancel_stream(stream_id: uint256):
 
     amounts_refund: uint256[N_COINS] = stream.amounts_remaining
     reward_refund: uint256 = stream.reward_per_period * stream.periods_remaining
-    stream.donor = empty(address)
-    stream.amounts_remaining = empty(uint256[N_COINS])
-    stream.periods_remaining = 0
-    stream.next_ts = 0
-    stream.period_length = 0
-    self.streams[stream_id] = stream
+    self.streams[stream_id] = DonationStream(
+        donor=empty(address),
+        amounts_remaining=empty(uint256[N_COINS]),
+        amounts_per_period=empty(uint256[N_COINS]),
+        period_length=0,
+        periods_remaining=0,
+        next_ts=0,
+        reward_per_period=0,
+    )
 
     for i: uint256 in range(N_COINS):
         if amounts_refund[i] > 0:

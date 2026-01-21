@@ -36,10 +36,12 @@ def test_create_stream_records_and_transfers(donation_pool, tokens, donor):
     assert stream[0] == donor
     assert stream[1][0] == amounts[0]
     assert stream[1][1] == amounts[1]
-    assert stream[2] == period_length
-    assert stream[3] == n_periods
-    assert stream[4] == now + period_length
-    assert stream[5] == reward_per_period
+    assert stream[2][0] == amounts[0] // n_periods
+    assert stream[2][1] == amounts[1] // n_periods
+    assert stream[3] == period_length
+    assert stream[4] == n_periods
+    assert stream[5] == now + period_length
+    assert stream[6] == reward_per_period
 
     assert token0.balanceOf(donation_pool.address) == amounts[0]
     assert token1.balanceOf(donation_pool.address) == amounts[1]
