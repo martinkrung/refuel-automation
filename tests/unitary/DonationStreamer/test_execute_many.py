@@ -36,7 +36,7 @@ def test_execute_many_aggregates_rewards(donation_streamer, mock_pool, tokens, d
     with boa.env.prank(caller):
         executed = donation_streamer.execute_many([0, 1])
 
-    assert executed == 2
+    assert executed == [True, True]
     assert boa.env.get_balance(caller) == caller_balance + reward_total
     assert token0.allowance(donation_streamer.address, mock_pool.address) == 0
     assert token1.allowance(donation_streamer.address, mock_pool.address) == 0

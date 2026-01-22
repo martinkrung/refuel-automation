@@ -35,7 +35,7 @@ def test_execute_sends_tokens_and_reward(donation_streamer, mock_pool, tokens, d
     with boa.env.prank(caller):
         executed = donation_streamer.execute(0)
 
-    assert executed == 1
+    assert executed is True
     assert boa.env.get_balance(caller) == caller_balance + reward_per_period
     assert token0.balanceOf(mock_pool.address) == amounts[0] // n_periods
     assert token1.balanceOf(mock_pool.address) == amounts[1] // n_periods

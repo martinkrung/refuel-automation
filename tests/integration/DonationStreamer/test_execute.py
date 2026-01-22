@@ -47,7 +47,7 @@ def test_execute_adds_liquidity_and_pays_reward(
     with boa.env.prank(caller):
         executed = donation_streamer.execute(stream_id)
 
-    assert executed == 1
+    assert executed is True
     assert boa.env.get_balance(caller) == caller_balance_before + reward_per_period
     assert token0.balanceOf(pool_contract.address) == pool_balance0_before + amounts[0] // n_periods
     assert token1.balanceOf(pool_contract.address) == pool_balance1_before + amounts[1] // n_periods

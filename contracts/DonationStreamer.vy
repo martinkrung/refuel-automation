@@ -65,7 +65,7 @@ struct DonationStream:
 
 
 N_COINS: constant(uint256) = 2
-MAX_BATCH: constant(uint256) = 32
+N_MAX_EXECUTE: constant(uint256) = 32
 N_MAX_VIEW: constant(uint256) = 1024
 
 stream_count: public(uint256)
@@ -103,6 +103,8 @@ def _decrease_allowance(token: address, spender: address, amount: uint256):
         assert extcall IERC20(token).approve(spender, 0), "approve failed"
     else:
         assert extcall IERC20(token).approve(spender, allowance - amount), "approve failed"
+
+
 
 
 @internal
@@ -160,6 +162,7 @@ def _execute_stream(stream_id: uint256) -> bool:
         return False
 
     is_final: bool = periods_due == stream.periods_remaining
+    pool: address = stream.pool
 
     amounts_to_send: uint256[N_COINS] = empty(uint256[N_COINS])
     for j: uint256 in range(N_COINS):
@@ -174,18 +177,19 @@ def _execute_stream(stream_id: uint256) -> bool:
 
     stream.periods_remaining -= periods_due
     stream.next_ts += stream.period_length * periods_due
-    if stream.periods_remaining == 0:
-        stream.donor = empty(address)
 
     reward_paid: uint256 = stream.reward_per_period * periods_due
     if is_final:
         reward_paid = stream.reward_remaining
     stream.reward_remaining -= reward_paid
 
-    self.streams[stream_id] = stream
+    if is_final:
+        self.streams[stream_id] = empty(DonationStream)
+    else:
+        self.streams[stream_id] = stream
 
     if amounts_to_send[0] > 0 or amounts_to_send[1] > 0:
-        extcall DonationPoolTarget(stream.pool).add_liquidity(
+        extcall DonationPoolTarget(pool).add_liquidity(
             amounts_to_send,
             0,
             empty(address),
@@ -197,7 +201,7 @@ def _execute_stream(stream_id: uint256) -> bool:
     log StreamExecuted(
         stream_id=stream_id,
         caller=msg.sender,
-        pool=stream.pool,
+        pool=pool,
         periods=periods_due,
         amounts=amounts_to_send,
         reward_paid=reward_paid,
@@ -338,26 +342,24 @@ def create_stream(
 
 @external
 @nonreentrant
-def execute_many(stream_ids: DynArray[uint256, MAX_BATCH]) -> uint256:
+def execute_many(stream_ids: DynArray[uint256, N_MAX_EXECUTE]) -> DynArray[bool, N_MAX_EXECUTE]:
     """
     @notice Execute a batch of stream ids.
+    @return Per-stream execution results in input order.
     """
-    executed: uint256 = 0
-    for i: uint256 in range(len(stream_ids), bound=MAX_BATCH):
-        if self._execute_stream(stream_ids[i]):
-            executed += 1
-    return executed
+    results: DynArray[bool, N_MAX_EXECUTE] = empty(DynArray[bool, N_MAX_EXECUTE])
+    for i: uint256 in range(len(stream_ids), bound=N_MAX_EXECUTE):
+        results.append(self._execute_stream(stream_ids[i]))
+    return results
 
 
 @external
 @nonreentrant
-def execute(stream_id: uint256) -> uint256:
+def execute(stream_id: uint256) -> bool:
     """
     @notice Execute a single stream id.
     """
-    if self._execute_stream(stream_id):
-        return 1
-    return 0
+    return self._execute_stream(stream_id)
 
 
 @external
@@ -370,25 +372,16 @@ def cancel_stream(stream_id: uint256):
     assert stream.donor != empty(address), "inactive"
     assert stream.donor == msg.sender, "donor only"
 
+    pool: address = stream.pool
+    coins: address[N_COINS] = stream.coins
     amounts_refund: uint256[N_COINS] = stream.amounts_remaining
     reward_refund: uint256 = stream.reward_remaining
-    self.streams[stream_id] = DonationStream(
-        donor=empty(address),
-        pool=empty(address),
-        coins=empty(address[N_COINS]),
-        amounts_per_period=empty(uint256[N_COINS]),
-        period_length=0,
-        reward_per_period=0,
-        next_ts=0,
-        reward_remaining=0,
-        amounts_remaining=empty(uint256[N_COINS]),
-        periods_remaining=0,
-    )
+    self.streams[stream_id] = empty(DonationStream)
 
     for i: uint256 in range(N_COINS):
         if amounts_refund[i] > 0:
-            self._decrease_allowance(stream.coins[i], stream.pool, amounts_refund[i])
-            assert extcall IERC20(stream.coins[i]).transfer(
+            self._decrease_allowance(coins[i], pool, amounts_refund[i])
+            assert extcall IERC20(coins[i]).transfer(
                 msg.sender, amounts_refund[i], default_return_value=True
             ), "refund failed"
     if reward_refund > 0:
@@ -397,7 +390,7 @@ def cancel_stream(stream_id: uint256):
     log StreamCancelled(
         stream_id=stream_id,
         donor=msg.sender,
-        pool=stream.pool,
+        pool=pool,
         amounts=amounts_refund,
         reward_refund=reward_refund,
     )
