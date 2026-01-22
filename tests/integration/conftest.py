@@ -189,7 +189,6 @@ def tokens(pool_contract, erc20_factory):
 
 
 @pytest.fixture()
-def donation_pool(deployer, pool_contract, tokens):
-    token0, token1 = tokens
+def donation_streamer(deployer):
     with boa.env.prank(deployer):
-        return boa.load("contracts/DonationPool.vy", pool_contract.address, [token0.address, token1.address])
+        return boa.load("contracts/DonationStreamer.vy")
