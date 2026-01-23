@@ -30,7 +30,35 @@ def _due_periods(stream, now, zero_address):
     return periods_due
 
 
-def test_rewards_due_matches_periods(donation_streamer, pool_contract, tokens, donor):
+def test_streams_and_rewards_due_are_due(donation_streamer, pool_contract, tokens, donor):
+    token0, token1 = tokens
+    period_length = 60
+    reward_per_period = 10**14
+
+    for i in range(3):
+        amounts = [10**18 + i, 2 * 10**18 + i]
+        _fund_and_approve(token0, donor, donation_streamer.address, amounts[0])
+        _fund_and_approve(token1, donor, donation_streamer.address, amounts[1])
+        boa.env.set_balance(donor, reward_per_period)
+        with boa.env.prank(donor):
+            donation_streamer.create_stream(
+                pool_contract.address,
+                [token0.address, token1.address],
+                amounts,
+                period_length,
+                1,
+                reward_per_period,
+                value=reward_per_period,
+            )
+
+    boa.env.time_travel(seconds=period_length)
+    due_ids, rewards = donation_streamer.streams_and_rewards_due()
+
+    assert due_ids == [2, 1, 0]
+    assert rewards == [reward_per_period, reward_per_period, reward_per_period]
+
+
+def test_streams_and_rewards_due_matches_periods(donation_streamer, pool_contract, tokens, donor):
     token0, token1 = tokens
     period_length = 60
     rewards = [10**14, 2 * 10**14, 3 * 10**14]
@@ -52,14 +80,12 @@ def test_rewards_due_matches_periods(donation_streamer, pool_contract, tokens, d
             )
 
     boa.env.time_travel(seconds=period_length * 2)
-    due_ids = [0, 1, 2]
-    rewards_due = donation_streamer.rewards_due(due_ids, 2)
+    due_ids, rewards_due = donation_streamer.streams_and_rewards_due()
     now = boa.env.timestamp
     zero_address = boa.eval("empty(address)")
-    expected = []
 
-    for i in range(2):
-        stream_id = due_ids[len(due_ids) - 1 - i]
+    expected = []
+    for stream_id in due_ids:
         stream = donation_streamer.streams(stream_id)
         expected.append(stream[5] * _due_periods(stream, now, zero_address))
 

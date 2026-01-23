@@ -16,7 +16,7 @@ def test_cancel_stream_refunds_remaining(donation_streamer, pool_contract, token
     period_length = 120
     n_periods = 2
     reward_per_period = 10**14
-    reward_total = reward_per_period * n_periods + 1
+    reward_total = reward_per_period * n_periods
     amounts = [2 * 10**18, 4 * 10**18]
 
     _fund_and_approve(token0, donor, donation_streamer.address, amounts[0])

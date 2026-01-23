@@ -1,9 +1,11 @@
 # pragma version 0.4.3
 
+
 event Transfer:
     sender: indexed(address)
     receiver: indexed(address)
     value: uint256
+
 
 event Approval:
     owner: indexed(address)

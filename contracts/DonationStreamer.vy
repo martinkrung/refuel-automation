@@ -83,28 +83,20 @@ def __init__():
 
 ############ INTERNAL HELPERS ############
 @internal
-def _increase_allowance(token: address, spender: address, amount: uint256):
+def _safe_approve(token: address, spender: address, amount: uint256):
     """
-    @dev Increase allowance for a pool by amount.
-    """
-    assert extcall IERC20(token).approve(
-        spender,
-        staticcall IERC20(token).allowance(self, spender) + amount,
-    ), "approve failed"
-
-
-@internal
-def _decrease_allowance(token: address, spender: address, amount: uint256):
-    """
-    @dev Decrease allowance for a pool by amount, floored at zero.
+    @dev Safely set allowance, resetting to zero when needed.
     """
     allowance: uint256 = staticcall IERC20(token).allowance(self, spender)
-    if amount > allowance:
-        assert extcall IERC20(token).approve(spender, 0), "approve failed"
-    else:
-        assert extcall IERC20(token).approve(spender, allowance - amount), "approve failed"
-
-
+    if allowance == amount:
+        return
+    if allowance != 0 and amount != 0:
+        assert extcall IERC20(token).approve(
+            spender, 0, default_return_value=True
+        ), "approve failed"
+    assert extcall IERC20(token).approve(
+        spender, amount, default_return_value=True
+    ), "approve failed"
 
 
 @internal
@@ -128,30 +120,6 @@ def _due_periods(stream: DonationStream) -> uint256:
 
 
 @internal
-@view
-def _streams_due(n_max: uint256) -> DynArray[uint256, N_MAX_VIEW]:
-    """
-    @dev Collect due stream ids from newest to oldest.
-    """
-    due_ids: DynArray[uint256, N_MAX_VIEW] = empty(DynArray[uint256, N_MAX_VIEW])
-    count: uint256 = self.stream_count
-    if count == 0:
-        return due_ids
-
-    limit: uint256 = count
-    if limit > N_MAX_VIEW:
-        limit = N_MAX_VIEW
-    if n_max != 0 and n_max < limit:
-        limit = n_max
-
-    for i: uint256 in range(limit, bound=N_MAX_VIEW):
-        stream_id: uint256 = count - 1 - i
-        if self._due_periods(self.streams[stream_id]) > 0:
-            due_ids.append(stream_id)
-    return due_ids
-
-
-@internal
 def _execute_stream(stream_id: uint256) -> bool:
     """
     @dev Execute a single stream if due and pay its reward.
@@ -163,8 +131,10 @@ def _execute_stream(stream_id: uint256) -> bool:
 
     is_final: bool = periods_due == stream.periods_remaining
     pool: address = stream.pool
+    coins: address[N_COINS] = stream.coins
 
-    amounts_to_send: uint256[N_COINS] = empty(uint256[N_COINS])
+    # Compute the slice for this execution, using the remainder on the final call.
+    amounts_to_donate: uint256[N_COINS] = empty(uint256[N_COINS])
     for j: uint256 in range(N_COINS):
         remaining: uint256 = stream.amounts_remaining[j]
         if remaining == 0:
@@ -172,29 +142,38 @@ def _execute_stream(stream_id: uint256) -> bool:
         amount: uint256 = stream.amounts_per_period[j] * periods_due
         if is_final:
             amount = remaining
-        amounts_to_send[j] = amount
+        amounts_to_donate[j] = amount
         stream.amounts_remaining[j] = remaining - amount
 
     stream.periods_remaining -= periods_due
     stream.next_ts += stream.period_length * periods_due
 
+    # Rewards are prorated per period, with final execution paying the remainder.
     reward_paid: uint256 = stream.reward_per_period * periods_due
     if is_final:
         reward_paid = stream.reward_remaining
     stream.reward_remaining -= reward_paid
 
+    # Clear storage once the stream is finished.
     if is_final:
         self.streams[stream_id] = empty(DonationStream)
     else:
         self.streams[stream_id] = stream
 
-    if amounts_to_send[0] > 0 or amounts_to_send[1] > 0:
+    # Only approve and add liquidity when there is a non-zero donation.
+    if amounts_to_donate[0] > 0 or amounts_to_donate[1] > 0:
+        for j: uint256 in range(N_COINS):
+            if amounts_to_donate[j] > 0:
+                self._safe_approve(coins[j], pool, amounts_to_donate[j])
         extcall DonationPoolTarget(pool).add_liquidity(
-            amounts_to_send,
+            amounts_to_donate,
             0,
             empty(address),
             True,
         )
+        for j: uint256 in range(N_COINS):
+            if amounts_to_donate[j] > 0:
+                self._safe_approve(coins[j], pool, 0)
 
     if reward_paid > 0:
         send(msg.sender, reward_paid)
@@ -203,14 +182,14 @@ def _execute_stream(stream_id: uint256) -> bool:
         caller=msg.sender,
         pool=pool,
         periods=periods_due,
-        amounts=amounts_to_send,
+        amounts=amounts_to_donate,
         reward_paid=reward_paid,
     )
 
     return True
 
 
-############### EXTERNAL VIEW ############
+############### EXTERNAL VIEWS ############
 @view
 @external
 def is_due(stream_id: uint256) -> bool:
@@ -222,54 +201,34 @@ def is_due(stream_id: uint256) -> bool:
 
 @view
 @external
-def streams_due(n_max: uint256 = N_MAX_VIEW) -> DynArray[uint256, N_MAX_VIEW]:
+def streams_and_rewards_due(
+) -> (DynArray[uint256, N_MAX_VIEW], DynArray[uint256, N_MAX_VIEW]):
     """
-    @notice Return up to n_max due stream ids, newest first.
-    @dev Not meant to be called onchain; iterates over up to N_MAX_VIEW streams.
+    @notice Return due stream ids and rewards, newest first.
+    @dev Not meant to be called onchain; iterates over up to N_MAX_VIEW streams starting from the newest.
     """
-    return self._streams_due(n_max)
-
-
-@view
-@external
-def view_executable(n_max: uint256 = N_MAX_VIEW) -> DynArray[uint256, N_MAX_VIEW]:
-    """
-    @notice Alias for streams_due.
-    @dev Not meant to be called onchain; iterates over up to N_MAX_VIEW streams.
-    """
-    return self._streams_due(n_max)
-
-
-@view
-@external
-def rewards_due(
-    stream_ids: DynArray[uint256, N_MAX_VIEW],
-    n_max: uint256 = N_MAX_VIEW,
-) -> DynArray[uint256, N_MAX_VIEW]:
-    """
-    @notice Return due rewards for the latest stream ids.
-    @dev Not meant to be called onchain; iterates over up to N_MAX_VIEW ids.
-    """
+    due_ids: DynArray[uint256, N_MAX_VIEW] = empty(DynArray[uint256, N_MAX_VIEW])
     rewards: DynArray[uint256, N_MAX_VIEW] = empty(DynArray[uint256, N_MAX_VIEW])
-    count: uint256 = len(stream_ids)
+    count: uint256 = self.stream_count
+    if count == 0:
+        return due_ids, rewards
 
-    limit: uint256 = count
-    if limit > N_MAX_VIEW:
-        limit = N_MAX_VIEW
-    if n_max != 0 and n_max < limit:
-        limit = n_max
-
+    # Walk backward from newest to oldest, capped for view usage.
+    limit: uint256 = min(count, N_MAX_VIEW)
     for i: uint256 in range(limit, bound=N_MAX_VIEW):
-        stream_id: uint256 = stream_ids[count - 1 - i]
+        stream_id: uint256 = count - 1 - i
         stream: DonationStream = self.streams[stream_id]
         periods_due: uint256 = self._due_periods(stream)
         if periods_due == 0:
-            rewards.append(0)
-        elif periods_due == stream.periods_remaining:
+            continue
+
+        due_ids.append(stream_id)
+        if periods_due == stream.periods_remaining:
             rewards.append(stream.reward_remaining)
         else:
             rewards.append(stream.reward_per_period * periods_due)
-    return rewards
+
+    return due_ids, rewards
 
 
 ############### EXTERNAL ACTIONS #########
@@ -288,19 +247,21 @@ def create_stream(
     @notice Create a donation stream for a pool.
     """
     assert pool != empty(address), "pool required"
-    assert coins[0] != empty(address) and coins[1] != empty(address), "coin required"
-    assert coins[0] != coins[1], "same coin"
     assert n_periods > 0, "bad n_periods"
     assert period_length > 0, "bad period_length"
     assert amounts[0] > 0 or amounts[1] > 0, "zero amounts"
 
+    # Ensure caller-provided coins match the pool configuration.
     assert (
         coins[0] == staticcall DonationPoolTarget(pool).coins(0)
         and coins[1] == staticcall DonationPoolTarget(pool).coins(1)
     ), "coin mismatch"
 
-    assert msg.value >= reward_per_period * n_periods, "reward mismatch"
+    # Rewards are pre-funded for all periods; excess is refunded.
+    reward_total: uint256 = reward_per_period * n_periods
+    assert msg.value >= reward_total, "reward mismatch"
 
+    # Per-period amounts are truncated; remainders donate on the final period.
     amounts_per_period: uint256[N_COINS] = empty(uint256[N_COINS])
     for i: uint256 in range(N_COINS):
         amount: uint256 = amounts[i]
@@ -308,7 +269,6 @@ def create_stream(
             assert extcall IERC20(coins[i]).transferFrom(
                 msg.sender, self, amount, default_return_value=True
             ), "transfer failed"
-            self._increase_allowance(coins[i], pool, amount)
         amounts_per_period[i] = amount // n_periods
 
     stream_id: uint256 = self.stream_count
@@ -322,10 +282,14 @@ def create_stream(
         period_length=period_length,
         reward_per_period=reward_per_period,
         next_ts=block.timestamp,
-        reward_remaining=msg.value,
+        reward_remaining=reward_total,
         amounts_remaining=amounts,
         periods_remaining=n_periods,
     )
+
+    # Refund excess message value.
+    if msg.value > reward_total:
+        send(msg.sender, msg.value - reward_total)
 
     log StreamCreated(
         stream_id=stream_id,
@@ -342,34 +306,11 @@ def create_stream(
 
 @external
 @nonreentrant
-def execute_many(stream_ids: DynArray[uint256, N_MAX_EXECUTE]) -> DynArray[bool, N_MAX_EXECUTE]:
-    """
-    @notice Execute a batch of stream ids.
-    @return Per-stream execution results in input order.
-    """
-    results: DynArray[bool, N_MAX_EXECUTE] = empty(DynArray[bool, N_MAX_EXECUTE])
-    for i: uint256 in range(len(stream_ids), bound=N_MAX_EXECUTE):
-        results.append(self._execute_stream(stream_ids[i]))
-    return results
-
-
-@external
-@nonreentrant
-def execute(stream_id: uint256) -> bool:
-    """
-    @notice Execute a single stream id.
-    """
-    return self._execute_stream(stream_id)
-
-
-@external
-@nonreentrant
 def cancel_stream(stream_id: uint256):
     """
     @notice Cancel a stream and refund remaining balances.
     """
     stream: DonationStream = self.streams[stream_id]
-    assert stream.donor != empty(address), "inactive"
     assert stream.donor == msg.sender, "donor only"
 
     pool: address = stream.pool
@@ -380,7 +321,6 @@ def cancel_stream(stream_id: uint256):
 
     for i: uint256 in range(N_COINS):
         if amounts_refund[i] > 0:
-            self._decrease_allowance(coins[i], pool, amounts_refund[i])
             assert extcall IERC20(coins[i]).transfer(
                 msg.sender, amounts_refund[i], default_return_value=True
             ), "refund failed"
@@ -394,3 +334,25 @@ def cancel_stream(stream_id: uint256):
         amounts=amounts_refund,
         reward_refund=reward_refund,
     )
+
+
+@external
+@nonreentrant
+def execute(stream_id: uint256) -> bool:
+    """
+    @notice Execute a single stream id.
+    """
+    return self._execute_stream(stream_id)
+
+
+@external
+@nonreentrant
+def execute_many(stream_ids: DynArray[uint256, N_MAX_EXECUTE]) -> DynArray[bool, N_MAX_EXECUTE]:
+    """
+    @notice Execute a batch of stream ids.
+    @return Per-stream execution results in input order.
+    """
+    results: DynArray[bool, N_MAX_EXECUTE] = empty(DynArray[bool, N_MAX_EXECUTE])
+    for i: uint256 in range(len(stream_ids), bound=N_MAX_EXECUTE):
+        results.append(self._execute_stream(stream_ids[i]))
+    return results

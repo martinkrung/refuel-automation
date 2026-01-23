@@ -30,7 +30,6 @@ def add_liquidity(
     for i: uint256 in range(2):
         if amounts[i] > 0:
             assert extcall IERC20(coins[i]).transferFrom(msg.sender, self, amounts[i]), "transfer failed"
-
     self.last_amounts = amounts
     self.last_provider = msg.sender
     self.last_donation = donation

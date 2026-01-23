@@ -1,4 +1,5 @@
 import boa
+import pytest
 
 
 def _mint_and_approve(token, owner, spender, amount):
@@ -7,16 +8,16 @@ def _mint_and_approve(token, owner, spender, amount):
         token.approve(spender, amount)
 
 
-def test_cancel_stream_refunds(donation_streamer, mock_pool, tokens, donor):
+@pytest.mark.parametrize("amounts", ([1_000, 2_000], [0, 2_000], [1_000, 0]))
+def test_cancel_stream_refunds(donation_streamer, mock_pool, tokens, donor, amounts):
     token0, token1 = tokens
-    amounts = [1_000, 2_000]
     _mint_and_approve(token0, donor, donation_streamer.address, amounts[0])
     _mint_and_approve(token1, donor, donation_streamer.address, amounts[1])
 
     period_length = 10
     n_periods = 3
     reward_per_period = 7
-    reward_total = reward_per_period * n_periods + 2
+    reward_total = reward_per_period * n_periods
     boa.env.set_balance(donor, reward_total)
 
     with boa.env.prank(donor):
