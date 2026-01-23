@@ -162,6 +162,10 @@ def _execute_stream(stream_id: uint256) -> bool:
 
     # Only approve and add liquidity when there is a non-zero donation.
     if amounts_to_donate[0] > 0 or amounts_to_donate[1] > 0:
+        balances_before: uint256[N_COINS] = empty(uint256[N_COINS])
+        for j: uint256 in range(N_COINS):
+            if amounts_to_donate[j] > 0:
+                balances_before[j] = staticcall IERC20(coins[j]).balanceOf(self)
         for j: uint256 in range(N_COINS):
             if amounts_to_donate[j] > 0:
                 self._safe_approve(coins[j], pool, amounts_to_donate[j])
@@ -173,6 +177,9 @@ def _execute_stream(stream_id: uint256) -> bool:
         )
         for j: uint256 in range(N_COINS):
             if amounts_to_donate[j] > 0:
+                balance_after: uint256 = staticcall IERC20(coins[j]).balanceOf(self)
+                assert balances_before[j] >= balance_after, "bad pool pull"
+                assert balances_before[j] - balance_after == amounts_to_donate[j], "bad pool pull"
                 self._safe_approve(coins[j], pool, 0)
 
     if reward_paid > 0:
@@ -266,9 +273,12 @@ def create_stream(
     for i: uint256 in range(N_COINS):
         amount: uint256 = amounts[i]
         if amount > 0:
+            balance_before: uint256 = staticcall IERC20(coins[i]).balanceOf(self)
             assert extcall IERC20(coins[i]).transferFrom(
                 msg.sender, self, amount, default_return_value=True
             ), "transfer failed"
+            balance_after: uint256 = staticcall IERC20(coins[i]).balanceOf(self)
+            assert balance_after - balance_before == amount, "bad token transfer"
         amounts_per_period[i] = amount // n_periods
 
     stream_id: uint256 = self.stream_count
