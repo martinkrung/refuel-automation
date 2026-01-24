@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Donation Streamer</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #f6f5f1;
+        --panel: #ffffff;
+        --border: #e1ddd5;
+        --text: #1a1a1a;
+        --muted: #5e5d59;
+        --accent: #0f766e;
+        --accent-soft: rgba(15, 118, 110, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: radial-gradient(circle at top, #f9f4ea, #f6f5f1 45%, #efede7 100%);
+        font-family: "Space Grotesk", sans-serif;
+        color: var(--text);
+      }
+
+      main {
+        max-width: 920px;
+        margin: 0 auto;
+        padding: 40px 20px 60px;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+
+      header {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: center;
+      }
+
+      h1 {
+        font-size: 32px;
+        margin: 0 0 6px;
+      }
+
+      p {
+        margin: 0;
+        color: var(--muted);
+      }
+
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 18px;
+        box-shadow: 0 12px 24px rgba(17, 17, 17, 0.06);
+      }
+
+      .grid {
+        display: grid;
+        gap: 14px;
+      }
+
+      .grid.two {
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }
+
+      .grid.three {
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      }
+
+      label {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      input {
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        font-size: 14px;
+        background: #fbfbfa;
+      }
+
+      input:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-soft);
+      }
+
+      .mono {
+        font-family: "JetBrains Mono", monospace;
+      }
+
+      .token-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      .token-box {
+        border: 1px dashed var(--border);
+        border-radius: 12px;
+        padding: 12px;
+        background: #faf9f7;
+      }
+
+      .stream-list {
+        margin-top: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .stream-row {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 12px;
+        background: #fbfaf8;
+        display: grid;
+        gap: 8px;
+      }
+
+      .stream-row .meta {
+        display: flex;
+        justify-content: space-between;
+        font-size: 13px;
+        color: var(--muted);
+        gap: 12px;
+      }
+
+      .stream-row .amounts {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        font-size: 13px;
+      }
+
+      .due-list {
+        margin-top: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .due-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 13px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        background: #faf9f7;
+      }
+
+      .tag-you {
+        color: #b91c1c;
+        font-weight: 600;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 12px;
+      }
+
+      button {
+        border: none;
+        background: var(--accent);
+        color: white;
+        padding: 10px 14px;
+        border-radius: 10px;
+        cursor: pointer;
+        font-size: 14px;
+      }
+
+      button.secondary {
+        background: #e2ded6;
+        color: var(--text);
+      }
+
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .status {
+        font-size: 14px;
+        color: var(--muted);
+      }
+
+      @media (max-width: 640px) {
+        header {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <h1>Donation Streamer</h1>
+          <p>Create a stream that donates into a pool over time.</p>
+        </div>
+        <div class="actions">
+          <button id="connect" class="secondary">Connect Wallet</button>
+          <div class="mono" id="wallet">Not connected</div>
+          <div class="mono" id="chain">Chain: -</div>
+        </div>
+      </header>
+
+      <section class="panel">
+        <div class="grid two">
+          <label>
+            DonationStreamer Address
+            <input id="streamer" placeholder="0xDonationStreamer" />
+          </label>
+          <label>
+            Pool Address
+            <input id="pool" placeholder="0xPool" />
+          </label>
+        </div>
+        <div class="actions">
+          <button id="load" class="secondary">Load Pool</button>
+        </div>
+        <div class="grid two" style="margin-top: 14px;">
+          <div class="token-box">
+            <div class="token-row"><span>Coin 0</span><span id="coin0-symbol">-</span></div>
+            <div class="token-row"><span>Decimals</span><span id="coin0-decimals">-</span></div>
+            <div id="coin0-address" class="mono" style="margin-top: 8px;">-</div>
+          </div>
+          <div class="token-box">
+            <div class="token-row"><span>Coin 1</span><span id="coin1-symbol">-</span></div>
+            <div class="token-row"><span>Decimals</span><span id="coin1-decimals">-</span></div>
+            <div id="coin1-address" class="mono" style="margin-top: 8px;">-</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="grid three">
+          <label>
+            Amount Coin 0
+            <input id="amount0" type="number" min="0" step="any" placeholder="0.0" />
+          </label>
+          <label>
+            Amount Coin 1
+            <input id="amount1" type="number" min="0" step="any" placeholder="0.0" />
+          </label>
+          <label>
+            Period Length (sec)
+            <input id="period-length" type="number" min="1" step="1" placeholder="86400" />
+          </label>
+          <label>
+            Number of Periods
+            <input id="periods" type="number" min="1" step="1" placeholder="7" />
+          </label>
+          <label>
+            Reward per Period (ETH)
+            <input id="reward" type="number" min="0" step="any" placeholder="0.01" />
+          </label>
+          <div class="token-box">
+            <div class="token-row"><span>Total Reward</span><span id="reward-total">0 ETH</span></div>
+          </div>
+        </div>
+        <div class="actions">
+          <button id="approve0" class="secondary">Approve Coin 0</button>
+          <button id="approve1" class="secondary">Approve Coin 1</button>
+          <button id="create">Create Stream</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="status" id="status">Ready.</div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Due Streams</h2>
+          <button id="load-due" class="secondary">Refresh Due</button>
+        </div>
+        <div class="actions" style="margin-top: 0;">
+          <button id="execute-due">Execute Due Batch</button>
+        </div>
+        <div id="due-list" class="due-list"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Pool Streams</h2>
+        </div>
+        <div class="grid two">
+          <label>
+            Lookback (count)
+            <input id="lookback" type="number" min="1" step="1" value="32" />
+          </label>
+          <div class="actions" style="align-self: end;">
+            <button id="load-streams" class="secondary">Load Pool Streams</button>
+          </div>
+        </div>
+        <div id="streams" class="stream-list"></div>
+      </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+    <script>
+      const { ethers } = window;
+      const POOL_ABI_UINT = ["function coins(uint256) view returns (address)"];
+      const POOL_ABI_INT = ["function coins(int128) view returns (address)"];
+      const ERC20_ABI = [
+        "function symbol() view returns (string)",
+        "function decimals() view returns (uint8)",
+        "function approve(address spender, uint256 value) returns (bool)",
+      ];
+      const STREAMER_ABI = [
+        "function create_stream(address pool, address[2] coins, uint256[2] amounts, uint256 period_length, uint256 n_periods, uint256 reward_per_period) payable returns (uint256)",
+        "function cancel_stream(uint256 stream_id)",
+        "function execute(uint256 stream_id) returns (bool)",
+        "function execute_many(uint256[] stream_ids) returns (bool[])",
+        "function streams_and_rewards_due() view returns (uint256[], uint256[])",
+        "function stream_count() view returns (uint256)",
+        "function streams(uint256) view returns (address,address,address[2],uint256[2],uint256,uint256,uint256,uint256,uint256[2],uint256)",
+      ];
+
+      const STREAMER_ADDRESS = "0x2b786BB995978CC2242C567Ae62fd617b0eBC828";
+
+      const ui = {
+        streamer: document.getElementById("streamer"),
+        pool: document.getElementById("pool"),
+        amount0: document.getElementById("amount0"),
+        amount1: document.getElementById("amount1"),
+        periodLength: document.getElementById("period-length"),
+        periods: document.getElementById("periods"),
+        reward: document.getElementById("reward"),
+        rewardTotal: document.getElementById("reward-total"),
+        status: document.getElementById("status"),
+        wallet: document.getElementById("wallet"),
+        chain: document.getElementById("chain"),
+        lookback: document.getElementById("lookback"),
+        streams: document.getElementById("streams"),
+        dueList: document.getElementById("due-list"),
+      };
+
+      let provider = null;
+      let signer = null;
+      const coin0 = { address: null, symbol: "-", decimals: 18 };
+      const coin1 = { address: null, symbol: "-", decimals: 18 };
+
+      const setStatus = (msg) => (ui.status.textContent = msg);
+
+      const fmt = (addr) => `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+
+      const formatEta = (timestamp) => {
+        const now = Math.floor(Date.now() / 1000);
+        if (timestamp <= now) return "now";
+        let remaining = timestamp - now;
+        const hours = Math.floor(remaining / 3600);
+        remaining -= hours * 3600;
+        const minutes = Math.floor(remaining / 60);
+        const seconds = remaining - minutes * 60;
+        return `${hours}h ${minutes}m ${seconds}s`;
+      };
+
+      const updateRewardTotal = () => {
+        try {
+          const per = ui.reward.value || "0";
+          const periods = Math.max(parseInt(ui.periods.value || "0", 10), 0);
+          const total = ethers.utils.parseEther(per).mul(periods || 0);
+          ui.rewardTotal.textContent = `${ethers.utils.formatEther(total)} ETH`;
+        } catch {
+          ui.rewardTotal.textContent = "0 ETH";
+        }
+      };
+
+      const setStreamerAddress = () => {
+        ui.streamer.value = STREAMER_ADDRESS;
+        ui.streamer.disabled = true;
+      };
+
+      const connect = async () => {
+        if (!window.ethereum) {
+          setStatus("Install a wallet like MetaMask or Rabby.");
+          return;
+        }
+        provider = new ethers.providers.Web3Provider(window.ethereum);
+        await provider.send("eth_requestAccounts", []);
+        signer = provider.getSigner();
+        const address = await signer.getAddress();
+        const network = await provider.getNetwork();
+        ui.wallet.textContent = fmt(address);
+        ui.chain.textContent = `Chain: ${network.chainId}`;
+        setStatus("Wallet connected.");
+        setStreamerAddress();
+      };
+
+      const loadTokenMeta = async (address) => {
+        const token = new ethers.Contract(address, ERC20_ABI, provider);
+        const [symbol, decimals] = await Promise.all([
+          token.symbol().catch(() => "TOKEN"),
+          token.decimals().catch(() => 18),
+        ]);
+        return { symbol, decimals };
+      };
+
+      const loadPool = async () => {
+        if (!provider) {
+          setStatus("Connect wallet first.");
+          return;
+        }
+        const pool = ui.pool.value.trim();
+        if (!ethers.utils.isAddress(pool)) {
+          setStatus("Enter a valid pool address.");
+          return;
+        }
+        setStatus("Loading pool coins...");
+        let coin0Address;
+        let coin1Address;
+        try {
+          const poolContract = new ethers.Contract(pool, POOL_ABI_UINT, provider);
+          coin0Address = await poolContract.coins(0);
+          coin1Address = await poolContract.coins(1);
+        } catch {
+          const poolContract = new ethers.Contract(pool, POOL_ABI_INT, provider);
+          coin0Address = await poolContract.coins(0);
+          coin1Address = await poolContract.coins(1);
+        }
+
+        coin0.address = coin0Address;
+        coin1.address = coin1Address;
+
+        const [meta0, meta1] = await Promise.all([
+          loadTokenMeta(coin0Address),
+          loadTokenMeta(coin1Address),
+        ]);
+
+        coin0.symbol = meta0.symbol;
+        coin0.decimals = meta0.decimals;
+        coin1.symbol = meta1.symbol;
+        coin1.decimals = meta1.decimals;
+
+        document.getElementById("coin0-symbol").textContent = coin0.symbol;
+        document.getElementById("coin0-decimals").textContent = coin0.decimals;
+        document.getElementById("coin0-address").textContent = coin0.address;
+        document.getElementById("coin1-symbol").textContent = coin1.symbol;
+        document.getElementById("coin1-decimals").textContent = coin1.decimals;
+        document.getElementById("coin1-address").textContent = coin1.address;
+
+        setStatus("Pool loaded.");
+      };
+
+      const approve = async (coin, amountField) => {
+        if (!signer) {
+          setStatus("Connect wallet first.");
+          return;
+        }
+        const streamer = ui.streamer.value.trim();
+        if (!ethers.utils.isAddress(streamer)) {
+          setStatus("Enter a DonationStreamer address.");
+          return;
+        }
+        if (!coin.address) {
+          setStatus("Load pool coins first.");
+          return;
+        }
+        const amount = ethers.utils.parseUnits(amountField.value || "0", coin.decimals);
+        if (amount.isZero()) {
+          setStatus("Amount must be greater than 0.");
+          return;
+        }
+        const token = new ethers.Contract(coin.address, ERC20_ABI, signer);
+        setStatus(`Approving ${coin.symbol}...`);
+        const tx = await token.approve(streamer, amount);
+        await tx.wait();
+        setStatus(`Approved ${coin.symbol}.`);
+      };
+
+      const createStream = async () => {
+        if (!signer) {
+          setStatus("Connect wallet first.");
+          return;
+        }
+        const streamer = ui.streamer.value.trim();
+        const pool = ui.pool.value.trim();
+        if (!ethers.utils.isAddress(streamer) || !ethers.utils.isAddress(pool)) {
+          setStatus("Enter valid contract addresses.");
+          return;
+        }
+        if (!coin0.address || !coin1.address) {
+          setStatus("Load pool coins first.");
+          return;
+        }
+        const periods = parseInt(ui.periods.value || "0", 10);
+        const periodLength = parseInt(ui.periodLength.value || "0", 10);
+        if (!periods || !periodLength) {
+          setStatus("Set period length and number of periods.");
+          return;
+        }
+        const rewardPer = ethers.utils.parseEther(ui.reward.value || "0");
+        const rewardTotal = rewardPer.mul(periods);
+        const amounts = [
+          ethers.utils.parseUnits(ui.amount0.value || "0", coin0.decimals),
+          ethers.utils.parseUnits(ui.amount1.value || "0", coin1.decimals),
+        ];
+        if (amounts[0].isZero() && amounts[1].isZero()) {
+          setStatus("Set at least one non-zero amount.");
+          return;
+        }
+        const streamerContract = new ethers.Contract(streamer, STREAMER_ABI, signer);
+        setStatus("Creating stream...");
+        const tx = await streamerContract.create_stream(
+          pool,
+          [coin0.address, coin1.address],
+          amounts,
+          periodLength,
+          periods,
+          rewardPer,
+          { value: rewardTotal }
+        );
+        await tx.wait();
+        setStatus("Stream created.");
+      };
+
+      const loadDueStreams = async () => {
+        if (!provider) {
+          setStatus("Connect wallet first.");
+          return;
+        }
+        const streamerAddress = ui.streamer.value.trim();
+        if (!ethers.utils.isAddress(streamerAddress)) {
+          setStatus("Enter a DonationStreamer address.");
+          return;
+        }
+
+        const pool = ui.pool.value.trim().toLowerCase();
+        const streamer = new ethers.Contract(streamerAddress, STREAMER_ABI, provider);
+        const [ids, rewards] = await streamer.streams_and_rewards_due();
+        const rows = [];
+        const limit = Math.min(ids.length, 32);
+
+        for (let i = 0; i < limit; i += 1) {
+          const id = ids[i];
+          const reward = rewards[i];
+          if (pool) {
+            const stream = await streamer.streams(id);
+            if (stream[1].toLowerCase() !== pool) {
+              continue;
+            }
+          }
+          rows.push({ id, reward });
+        }
+
+        ui.dueList.innerHTML = "";
+        if (!rows.length) {
+          ui.dueList.textContent = "No due streams.";
+          return;
+        }
+
+        rows.forEach(({ id, reward }) => {
+          const row = document.createElement("div");
+          row.className = "due-row";
+          row.innerHTML = `
+            <span class="mono">#${id.toString()}</span>
+            <span class="mono">${ethers.utils.formatEther(reward)} ETH</span>
+          `;
+          ui.dueList.appendChild(row);
+        });
+
+        ui.dueList.dataset.ids = JSON.stringify(rows.map((row) => row.id.toString()));
+      };
+
+      const executeDueBatch = async () => {
+        if (!signer) {
+          setStatus("Connect wallet first.");
+          return;
+        }
+        const ids = JSON.parse(ui.dueList.dataset.ids || "[]");
+        if (!ids.length) {
+          setStatus("No due streams.");
+          return;
+        }
+        const streamerAddress = ui.streamer.value.trim();
+        const streamer = new ethers.Contract(streamerAddress, STREAMER_ABI, signer);
+        setStatus("Executing due streams...");
+        const tx = await streamer.execute_many(ids);
+        await tx.wait();
+        setStatus("Batch executed.");
+        await loadDueStreams();
+        await loadStreams();
+      };
+
+      const loadStreams = async () => {
+        if (!provider) {
+          setStatus("Connect wallet first.");
+          return;
+        }
+        const streamerAddress = ui.streamer.value.trim();
+        if (!ethers.utils.isAddress(streamerAddress)) {
+          setStatus("Enter a DonationStreamer address.");
+          return;
+        }
+        const pool = ui.pool.value.trim();
+        if (pool && !ethers.utils.isAddress(pool)) {
+          setStatus("Enter a valid pool address.");
+          return;
+        }
+
+        const lookback = Math.max(parseInt(ui.lookback.value || "32", 10), 1);
+        const streamer = new ethers.Contract(streamerAddress, STREAMER_ABI, provider);
+        const total = (await streamer.stream_count()).toNumber();
+        const start = Math.max(total - lookback, 0);
+        const rows = [];
+
+        let user = null;
+        if (signer) {
+          user = (await signer.getAddress()).toLowerCase();
+        }
+
+        for (let id = total - 1; id >= start; id -= 1) {
+          const stream = await streamer.streams(id);
+          const donor = stream[0];
+          if (donor === ethers.constants.AddressZero) {
+            continue;
+          }
+          const poolAddress = stream[1];
+          if (pool && poolAddress.toLowerCase() !== pool.toLowerCase()) {
+            continue;
+          }
+          rows.push({ id, stream });
+        }
+
+        ui.streams.innerHTML = "";
+        if (!rows.length) {
+          ui.streams.textContent = "No streams found.";
+          return;
+        }
+
+        rows.forEach(({ id, stream }) => {
+          const donor = stream[0];
+          const poolAddress = stream[1];
+          const amounts = stream[8];
+          const periodsRemaining = parseInt(stream[9].toString(), 10);
+          const nextTs = Number(stream[6]);
+          const rewardRemaining = stream[7].toString();
+
+          const isYou = user && donor.toLowerCase() === user;
+          const donorLabel = `${donor} ${isYou ? '<span class="tag-you">(you)</span>' : ''}`;
+          const amount0 = coin0.address
+            ? `${ethers.utils.formatUnits(amounts[0], coin0.decimals)} ${coin0.symbol}`
+            : amounts[0].toString();
+          const amount1 = coin1.address
+            ? `${ethers.utils.formatUnits(amounts[1], coin1.decimals)} ${coin1.symbol}`
+            : amounts[1].toString();
+
+          const row = document.createElement("div");
+          row.className = "stream-row";
+          const due = periodsRemaining > 0 && nextTs <= Math.floor(Date.now() / 1000);
+          const etaLabel = due ? "now" : `in ${formatEta(nextTs)}`;
+          row.innerHTML = `
+            <div class="meta">
+              <span class="mono">Stream #${id}</span>
+              <span class="mono">Periods ${periodsRemaining}</span>
+            </div>
+            <div class="meta">
+              <span class="mono">Pool ${poolAddress}</span>
+            </div>
+            <div class="meta">
+              <span class="mono">Donor ${donorLabel}</span>
+            </div>
+            <div class="amounts">
+              <span class="mono">Remaining ${amount0}</span>
+              <span class="mono">Remaining ${amount1}</span>
+              <span class="mono">Reward ${ethers.utils.formatEther(rewardRemaining)} ETH</span>
+            </div>
+          `;
+
+          const execBtn = document.createElement("button");
+          execBtn.textContent = `Execute (${etaLabel})`;
+          execBtn.className = "secondary";
+          execBtn.disabled = !due;
+          execBtn.onclick = async () => {
+            if (!signer) {
+              setStatus("Connect wallet first.");
+              return;
+            }
+            const streamerWithSigner = new ethers.Contract(
+              streamerAddress,
+              STREAMER_ABI,
+              signer
+            );
+            setStatus(`Executing stream ${id}...`);
+            const tx = await streamerWithSigner.execute(id);
+            await tx.wait();
+            setStatus(`Executed stream ${id}.`);
+            await loadStreams();
+            await loadDueStreams();
+          };
+          row.appendChild(execBtn);
+
+          if (isYou) {
+            const cancelBtn = document.createElement("button");
+            cancelBtn.textContent = "Cancel";
+            cancelBtn.className = "secondary";
+            cancelBtn.onclick = async () => {
+              if (!signer) {
+                setStatus("Connect wallet first.");
+                return;
+              }
+              const streamerWithSigner = new ethers.Contract(
+                streamerAddress,
+                STREAMER_ABI,
+                signer
+              );
+              setStatus(`Canceling stream ${id}...`);
+              const tx = await streamerWithSigner.cancel_stream(id);
+              await tx.wait();
+              setStatus(`Canceled stream ${id}.`);
+              await loadStreams();
+            };
+            row.appendChild(cancelBtn);
+          }
+
+          ui.streams.appendChild(row);
+        });
+      };
+
+      document.getElementById("connect").addEventListener("click", connect);
+      if (window.ethereum) {
+        window.ethereum.on("chainChanged", () => setStreamerAddress());
+      }
+      setStreamerAddress();
+      document.getElementById("load").addEventListener("click", loadPool);
+      document.getElementById("approve0").addEventListener("click", () => approve(coin0, ui.amount0));
+      document.getElementById("approve1").addEventListener("click", () => approve(coin1, ui.amount1));
+      document.getElementById("create").addEventListener("click", createStream);
+      document.getElementById("load-streams").addEventListener("click", loadStreams);
+      document.getElementById("load-due").addEventListener("click", loadDueStreams);
+      document.getElementById("execute-due").addEventListener("click", executeDueBatch);
+      ui.reward.addEventListener("input", updateRewardTotal);
+      ui.periods.addEventListener("input", updateRewardTotal);
+      updateRewardTotal();
+    </script>
+  </body>
+</html>
