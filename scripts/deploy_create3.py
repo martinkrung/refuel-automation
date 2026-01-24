@@ -10,7 +10,7 @@ from secure_key_utils import decrypt_private_key, getpass
 
 
 CREATE_X_ADDRESS = "0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed"
-RPC_URL = "https://gnosis.drpc.org"
+RPC_URL = "https://polygon.drpc.org"
 
 CONTRACT_NAME = "DonationStreamer"
 CONTRACT_PATH = "contracts/DonationStreamer.vy"
@@ -91,7 +91,7 @@ def main() -> None:
 
     contract = boa.load_partial(CONTRACT_PATH).at(address)
     contract.ctor_calldata = b""
-    verifier = Etherscan(etherscan_url, api_key, chain_id=chain_id)
+    verifier = Etherscan(etherscan_url+f"?chainid={chain_id}", api_key)
     boa.verify(contract, verifier=verifier)
 
     print(f"Deployed {CONTRACT_NAME} at {checksum}")
