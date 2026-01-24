@@ -111,6 +111,10 @@
         color: var(--muted);
       }
 
+      .token-row span:last-child {
+        text-align: right;
+      }
+
       .token-box {
         border: 1px dashed var(--border);
         border-radius: 12px;
@@ -244,11 +248,15 @@
           <div class="token-box">
             <div class="token-row"><span>Coin 0</span><span id="coin0-symbol">-</span></div>
             <div class="token-row"><span>Decimals</span><span id="coin0-decimals">-</span></div>
+            <div class="token-row"><span>Balance</span><span id="coin0-balance">-</span></div>
+            <div class="token-row"><span>Allowance</span><span id="coin0-allowance">-</span></div>
             <div id="coin0-address" class="mono" style="margin-top: 8px;">-</div>
           </div>
           <div class="token-box">
             <div class="token-row"><span>Coin 1</span><span id="coin1-symbol">-</span></div>
             <div class="token-row"><span>Decimals</span><span id="coin1-decimals">-</span></div>
+            <div class="token-row"><span>Balance</span><span id="coin1-balance">-</span></div>
+            <div class="token-row"><span>Allowance</span><span id="coin1-allowance">-</span></div>
             <div id="coin1-address" class="mono" style="margin-top: 8px;">-</div>
           </div>
         </div>
@@ -327,6 +335,8 @@
       const ERC20_ABI = [
         "function symbol() view returns (string)",
         "function decimals() view returns (uint8)",
+        "function balanceOf(address) view returns (uint256)",
+        "function allowance(address owner, address spender) view returns (uint256)",
         "function approve(address spender, uint256 value) returns (bool)",
       ];
       const STREAMER_ABI = [
@@ -360,6 +370,7 @@
 
       let provider = null;
       let signer = null;
+      let chainNow = null;
       const coin0 = { address: null, symbol: "-", decimals: 18 };
       const coin1 = { address: null, symbol: "-", decimals: 18 };
 
@@ -367,8 +378,7 @@
 
       const fmt = (addr) => `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 
-      const formatEta = (timestamp) => {
-        const now = Math.floor(Date.now() / 1000);
+      const formatEta = (timestamp, now) => {
         if (timestamp <= now) return "now";
         let remaining = timestamp - now;
         const hours = Math.floor(remaining / 3600);
@@ -394,6 +404,45 @@
         ui.streamer.disabled = true;
       };
 
+      const resetUi = () => {
+        ui.pool.value = "";
+        ui.amount0.value = "";
+        ui.amount1.value = "";
+        ui.periodLength.value = "";
+        ui.periods.value = "";
+        ui.reward.value = "";
+        ui.rewardTotal.textContent = "0 ETH";
+        ui.streams.textContent = "";
+        ui.dueList.textContent = "";
+        document.getElementById("coin0-symbol").textContent = "-";
+        document.getElementById("coin0-decimals").textContent = "-";
+        document.getElementById("coin0-address").textContent = "-";
+        document.getElementById("coin1-symbol").textContent = "-";
+        document.getElementById("coin1-decimals").textContent = "-";
+        document.getElementById("coin1-address").textContent = "-";
+        coin0.address = null;
+        coin1.address = null;
+      };
+
+      const withButton = async (button, label, action) => {
+        const previous = button.textContent;
+        button.disabled = true;
+        button.textContent = label;
+        try {
+          return await action();
+        } finally {
+          button.disabled = false;
+          button.textContent = previous;
+        }
+      };
+
+      const refreshChainTime = async () => {
+        if (!provider) return null;
+        const block = await provider.getBlock("latest");
+        chainNow = block.timestamp;
+        return chainNow;
+      };
+
       const connect = async () => {
         if (!window.ethereum) {
           setStatus("Install a wallet like MetaMask or Rabby.");
@@ -408,6 +457,7 @@
         ui.chain.textContent = `Chain: ${network.chainId}`;
         setStatus("Wallet connected.");
         setStreamerAddress();
+        await refreshChainTime();
       };
 
       const loadTokenMeta = async (address) => {
@@ -463,6 +513,43 @@
         document.getElementById("coin1-address").textContent = coin1.address;
 
         setStatus("Pool loaded.");
+        await refreshBalances();
+      };
+
+      const formatAmount = (amount, decimals) => {
+        const formatted = ethers.utils.formatUnits(amount, decimals);
+        const value = Number(formatted);
+        if (Number.isNaN(value)) return formatted;
+        return value.toFixed(5);
+      };
+
+      const refreshBalances = async () => {
+        if (!provider) return;
+        const streamer = ui.streamer.value.trim();
+        if (!ethers.utils.isAddress(streamer) || !coin0.address || !coin1.address) return;
+        const owner = signer ? await signer.getAddress() : ethers.constants.AddressZero;
+        const token0 = new ethers.Contract(coin0.address, ERC20_ABI, provider);
+        const token1 = new ethers.Contract(coin1.address, ERC20_ABI, provider);
+        const [
+          bal0,
+          bal1,
+          allowance0,
+          allowance1,
+        ] = await Promise.all([
+          token0.balanceOf(owner),
+          token1.balanceOf(owner),
+          token0.allowance(owner, streamer),
+          token1.allowance(owner, streamer),
+        ]);
+
+        document.getElementById("coin0-balance").textContent =
+          `${formatAmount(bal0, coin0.decimals)} ${coin0.symbol}`;
+        document.getElementById("coin1-balance").textContent =
+          `${formatAmount(bal1, coin1.decimals)} ${coin1.symbol}`;
+        document.getElementById("coin0-allowance").textContent =
+          `${formatAmount(allowance0, coin0.decimals)} ${coin0.symbol}`;
+        document.getElementById("coin1-allowance").textContent =
+          `${formatAmount(allowance1, coin1.decimals)} ${coin1.symbol}`;
       };
 
       const approve = async (coin, amountField) => {
@@ -489,6 +576,7 @@
         const tx = await token.approve(streamer, amount);
         await tx.wait();
         setStatus(`Approved ${coin.symbol}.`);
+        await refreshBalances();
       };
 
       const createStream = async () => {
@@ -535,6 +623,7 @@
         );
         await tx.wait();
         setStatus("Stream created.");
+        await refreshBalances();
       };
 
       const loadDueStreams = async () => {
@@ -632,18 +721,23 @@
           user = (await signer.getAddress()).toLowerCase();
         }
 
+        const ids = [];
         for (let id = total - 1; id >= start; id -= 1) {
-          const stream = await streamer.streams(id);
+          ids.push(id);
+        }
+
+        const streams = await Promise.all(ids.map((id) => streamer.streams(id)));
+        streams.forEach((stream, index) => {
           const donor = stream[0];
           if (donor === ethers.constants.AddressZero) {
-            continue;
+            return;
           }
           const poolAddress = stream[1];
           if (pool && poolAddress.toLowerCase() !== pool.toLowerCase()) {
-            continue;
+            return;
           }
-          rows.push({ id, stream });
-        }
+          rows.push({ id: ids[index], stream });
+        });
 
         ui.streams.innerHTML = "";
         if (!rows.length) {
@@ -671,7 +765,8 @@
           const row = document.createElement("div");
           row.className = "stream-row";
           const due = periodsRemaining > 0 && nextTs <= Math.floor(Date.now() / 1000);
-          const etaLabel = due ? "now" : `in ${formatEta(nextTs)}`;
+          const now = chainNow || Math.floor(Date.now() / 1000);
+          const etaLabel = due ? "now" : `in ${formatEta(nextTs, now)}`;
           row.innerHTML = `
             <div class="meta">
               <span class="mono">Stream #${id}</span>
