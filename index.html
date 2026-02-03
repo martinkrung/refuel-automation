@@ -301,6 +301,21 @@
 
       <section class="panel">
         <div class="panel-header">
+          <h2>Stream Executor</h2>
+        </div>
+        <div class="grid two">
+          <label>
+            StreamExecutor Address
+            <input id="executor" placeholder="0xStreamExecutor" />
+          </label>
+          <div class="actions" style="align-self: end;">
+            <button id="execute-executor">Execute via Executor</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
           <h2>Due Streams</h2>
           <button id="load-due" class="secondary">Refresh Due</button>
         </div>
@@ -349,10 +364,14 @@
         "function streams(uint256) view returns (address,address,address[2],uint256[2],uint256,uint256,uint256,uint256,uint256[2],uint256)",
       ];
 
+      const EXECUTOR_ABI = ["function execute()"];
+
       const STREAMER_ADDRESS = "0x2b786BB995978CC2242C567Ae62fd617b0eBC828";
+      const EXECUTOR_ADDRESS = "0x4a8Cc5Cb8f7242be9944E1313793c2E5411c462A";
 
       const ui = {
         streamer: document.getElementById("streamer"),
+        executor: document.getElementById("executor"),
         pool: document.getElementById("pool"),
         amount0: document.getElementById("amount0"),
         amount1: document.getElementById("amount1"),
@@ -402,6 +421,11 @@
       const setStreamerAddress = () => {
         ui.streamer.value = STREAMER_ADDRESS;
         ui.streamer.disabled = true;
+      };
+
+      const setExecutorAddress = () => {
+        ui.executor.value = EXECUTOR_ADDRESS;
+        ui.executor.disabled = true;
       };
 
       const resetUi = () => {
@@ -457,6 +481,7 @@
         ui.chain.textContent = `Chain: ${network.chainId}`;
         setStatus("Wallet connected.");
         setStreamerAddress();
+        setExecutorAddress();
         await refreshChainTime();
       };
 
@@ -694,6 +719,25 @@
         await loadStreams();
       };
 
+      const executeWithExecutor = async () => {
+        if (!signer) {
+          setStatus("Connect wallet first.");
+          return;
+        }
+        const executorAddress = ui.executor.value.trim();
+        if (!ethers.utils.isAddress(executorAddress)) {
+          setStatus("Enter a valid StreamExecutor address.");
+          return;
+        }
+        const executor = new ethers.Contract(executorAddress, EXECUTOR_ABI, signer);
+        setStatus("Executing via StreamExecutor...");
+        const tx = await executor.execute();
+        await tx.wait();
+        setStatus("Executor run complete.");
+        await loadDueStreams();
+        await loadStreams();
+      };
+
       const loadStreams = async () => {
         if (!provider) {
           setStatus("Connect wallet first.");
@@ -837,9 +881,13 @@
 
       document.getElementById("connect").addEventListener("click", connect);
       if (window.ethereum) {
-        window.ethereum.on("chainChanged", () => setStreamerAddress());
+        window.ethereum.on("chainChanged", () => {
+          setStreamerAddress();
+          setExecutorAddress();
+        });
       }
       setStreamerAddress();
+      setExecutorAddress();
       document.getElementById("load").addEventListener("click", loadPool);
       document.getElementById("approve0").addEventListener("click", () => approve(coin0, ui.amount0));
       document.getElementById("approve1").addEventListener("click", () => approve(coin1, ui.amount1));
@@ -847,6 +895,7 @@
       document.getElementById("load-streams").addEventListener("click", loadStreams);
       document.getElementById("load-due").addEventListener("click", loadDueStreams);
       document.getElementById("execute-due").addEventListener("click", executeDueBatch);
+      document.getElementById("execute-executor").addEventListener("click", executeWithExecutor);
       ui.reward.addEventListener("input", updateRewardTotal);
       ui.periods.addEventListener("input", updateRewardTotal);
       updateRewardTotal();

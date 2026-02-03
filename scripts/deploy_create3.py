@@ -10,12 +10,15 @@ from secure_key_utils import decrypt_private_key, getpass
 
 
 CREATE_X_ADDRESS = "0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed"
-RPC_URL = "https://polygon.drpc.org"
+RPC_URL = "https://eth.drpc.org"
 
 CONTRACT_NAME = "DonationStreamer"
 CONTRACT_PATH = "contracts/DonationStreamer.vy"
 SALT_SEED_TEXT = "DonationStreamer:v0.1.0"
 
+CONTRACT_NAME = "StreamExecutor"
+CONTRACT_PATH = "contracts/StreamExecutor.vy"
+SALT_SEED_TEXT = "StreamExecutor:v0.1.0"
 
 def _guarded_salt(deployer: str, chain_id: int, salt: bytes) -> bytes:
     sender = bytes.fromhex(deployer[2:])
