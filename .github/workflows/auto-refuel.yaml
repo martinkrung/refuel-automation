@@ -1,0 +1,55 @@
+name: Auto Refuel
+
+on:
+  schedule:
+    # Run every 6 hours
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (no broadcast)"
+        type: boolean
+        default: true
+      chains:
+        description: "Chains to refuel (comma-separated: gnosis,ethereum,base or all)"
+        type: string
+        default: "all"
+
+jobs:
+  refuel:
+    runs-on: ubuntu-latest
+    environment: mainnet
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install Python dependencies
+        run: uv sync --no-dev
+
+      - name: Run refuel
+        env:
+          PRIVATE_KEY: ${{ secrets.REFUEL_PRIVATE_KEY }}
+          GNOSIS_RPC_URL: ${{ secrets.GNOSIS_RPC_URL }}
+          ETH_RPC_URL: ${{ secrets.ETH_RPC_URL }}
+          BASE_RPC_URL: ${{ secrets.BASE_RPC_URL }}
+        run: |
+          # Parse chains input
+          CHAINS_ARG=""
+          if [ -n "${{ inputs.chains }}" ] && [ "${{ inputs.chains }}" != "all" ]; then
+            # Convert comma-separated to space-separated
+            CHAINS_ARG="--chains $(echo '${{ inputs.chains }}' | tr ',' ' ')"
+          fi
+
+          # Handle dry run flag
+          DRY_FLAG=""
+          # For scheduled runs, never dry run; for manual runs, check input
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.dry_run }}" = "true" ]; then
+            DRY_FLAG="--dry-run"
+          fi
+
+          uv run python scripts/refuel.py $CHAINS_ARG $DRY_FLAG

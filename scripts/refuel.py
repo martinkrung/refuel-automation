@@ -1,0 +1,185 @@
+"""
+Auto-refuel script for DonationStreamer contracts.
+Executes due streams across multiple chains.
+"""
+
+import argparse
+import sys
+
+import boa
+
+
+STREAM_EXECUTOR = "0x4a8cc5cb8f7242be9944e1313793c2e5411c462a"
+DONATION_STREAMER = "0x2b786BB995978CC2242C567Ae62fd617b0eBC828"
+
+CHAINS = {
+    "gnosis": {
+        "chain_id": 100,
+        "rpc_env": "GNOSIS_RPC_URL",
+        "explorer": "https://gnosisscan.io",
+    },
+    "ethereum": {
+        "chain_id": 1,
+        "rpc_env": "ETH_RPC_URL",
+        "explorer": "https://etherscan.io",
+    },
+    "base": {
+        "chain_id": 8453,
+        "rpc_env": "BASE_RPC_URL",
+        "explorer": "https://basescan.org",
+    },
+}
+
+
+def get_executor_contract():
+    """Load StreamExecutor contract interface."""
+    return boa.load_partial("contracts/StreamExecutor.vy").at(STREAM_EXECUTOR)
+
+
+def get_streamer_contract():
+    """Load DonationStreamer contract interface."""
+    return boa.load_partial("contracts/DonationStreamer.vy").at(DONATION_STREAMER)
+
+
+def check_due_streams(streamer) -> tuple[list[int], list[int]]:
+    """Check for due streams and their rewards."""
+    due_ids, rewards = streamer.streams_and_rewards_due()
+    return list(due_ids), list(rewards)
+
+
+def execute_refuel(chain: str, rpc_url: str, private_key: str, dry_run: bool) -> bool:
+    """Execute refuel for a single chain."""
+    config = CHAINS[chain]
+    print(f"\n{'='*60}")
+    print(f"Chain: {chain.upper()} (ID: {config['chain_id']})")
+    print(f"{'='*60}")
+
+    boa.set_network_env(rpc_url)
+
+    if private_key:
+        from eth_account import Account
+
+        account = Account.from_key(private_key)
+        boa.env.add_account(account)
+        boa.env.eoa = account.address
+        print(f"Executor: {account.address}")
+        balance = boa.env.get_balance(account.address)
+        print(f"Balance: {balance / 1e18:.6f} native")
+
+    streamer = get_streamer_contract()
+    due_ids, rewards = check_due_streams(streamer)
+
+    if not due_ids:
+        print("No streams due for execution.")
+        return True
+
+    total_reward = sum(rewards)
+    print(f"Due streams: {len(due_ids)}")
+    print(f"Stream IDs: {due_ids}")
+    print(f"Total reward: {total_reward / 1e18:.6f} native")
+
+    if dry_run:
+        print("[DRY RUN] Would execute streams, skipping actual transaction.")
+        return True
+
+    if not private_key:
+        print("ERROR: Private key required for execution (non-dry-run mode).")
+        return False
+
+    executor = get_executor_contract()
+    print("Executing streams...")
+
+    try:
+        tx = executor.execute()
+        print(f"Transaction successful!")
+        print(f"Explorer: {config['explorer']}/tx/{tx.txhash.hex() if hasattr(tx, 'txhash') else 'pending'}")
+        return True
+    except Exception as e:
+        print(f"ERROR: Transaction failed: {e}")
+        return False
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Auto-refuel for DonationStreamer")
+    parser.add_argument(
+        "--chains",
+        nargs="+",
+        choices=list(CHAINS.keys()) + ["all"],
+        default=["all"],
+        help="Chains to refuel (default: all)",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Dry run mode (no transactions)",
+    )
+    parser.add_argument(
+        "--gnosis-rpc",
+        help="Gnosis RPC URL (or set GNOSIS_RPC_URL env)",
+    )
+    parser.add_argument(
+        "--eth-rpc",
+        help="Ethereum RPC URL (or set ETH_RPC_URL env)",
+    )
+    parser.add_argument(
+        "--base-rpc",
+        help="Base RPC URL (or set BASE_RPC_URL env)",
+    )
+    parser.add_argument(
+        "--private-key",
+        help="Private key for signing (or set PRIVATE_KEY env)",
+    )
+    args = parser.parse_args()
+
+    import os
+
+    private_key = args.private_key or os.environ.get("PRIVATE_KEY")
+
+    rpc_urls = {
+        "gnosis": args.gnosis_rpc or os.environ.get("GNOSIS_RPC_URL"),
+        "ethereum": args.eth_rpc or os.environ.get("ETH_RPC_URL"),
+        "base": args.base_rpc or os.environ.get("BASE_RPC_URL"),
+    }
+
+    chains_to_run = list(CHAINS.keys()) if "all" in args.chains else args.chains
+
+    print("=" * 60)
+    print("DonationStreamer Auto-Refuel")
+    print("=" * 60)
+    print(f"Mode: {'DRY RUN' if args.dry_run else 'LIVE'}")
+    print(f"Chains: {', '.join(chains_to_run)}")
+    print(f"StreamExecutor: {STREAM_EXECUTOR}")
+    print(f"DonationStreamer: {DONATION_STREAMER}")
+
+    results = {}
+    for chain in chains_to_run:
+        rpc_url = rpc_urls.get(chain)
+        if not rpc_url:
+            print(f"\nWARNING: Skipping {chain} - no RPC URL configured")
+            results[chain] = None
+            continue
+
+        try:
+            success = execute_refuel(chain, rpc_url, private_key, args.dry_run)
+            results[chain] = success
+        except Exception as e:
+            print(f"\nERROR on {chain}: {e}")
+            results[chain] = False
+
+    print("\n" + "=" * 60)
+    print("SUMMARY")
+    print("=" * 60)
+    for chain, result in results.items():
+        status = "SKIPPED" if result is None else ("OK" if result else "FAILED")
+        print(f"  {chain}: {status}")
+
+    failed = [c for c, r in results.items() if r is False]
+    if failed:
+        print(f"\nFailed chains: {', '.join(failed)}")
+        sys.exit(1)
+
+    print("\nAll configured chains processed successfully.")
+
+
+if __name__ == "__main__":
+    main()
