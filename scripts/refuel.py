@@ -12,20 +12,22 @@ import boa
 STREAM_EXECUTOR = "0x4a8cc5cb8f7242be9944e1313793c2e5411c462a"
 DONATION_STREAMER = "0x2b786BB995978CC2242C567Ae62fd617b0eBC828"
 
+ALCHEMY_RPC_BASE = "https://{network}-mainnet.g.alchemy.com/v2/{api_key}"
+
 CHAINS = {
     "gnosis": {
         "chain_id": 100,
-        "rpc_env": "GNOSIS_RPC_URL",
+        "alchemy_network": "gnosis",
         "explorer": "https://gnosisscan.io",
     },
     "ethereum": {
         "chain_id": 1,
-        "rpc_env": "ETH_RPC_URL",
+        "alchemy_network": "eth",
         "explorer": "https://etherscan.io",
     },
     "base": {
         "chain_id": 8453,
-        "rpc_env": "BASE_RPC_URL",
+        "alchemy_network": "base",
         "explorer": "https://basescan.org",
     },
 }
@@ -114,16 +116,8 @@ def main():
         help="Dry run mode (no transactions)",
     )
     parser.add_argument(
-        "--gnosis-rpc",
-        help="Gnosis RPC URL (or set GNOSIS_RPC_URL env)",
-    )
-    parser.add_argument(
-        "--eth-rpc",
-        help="Ethereum RPC URL (or set ETH_RPC_URL env)",
-    )
-    parser.add_argument(
-        "--base-rpc",
-        help="Base RPC URL (or set BASE_RPC_URL env)",
+        "--alchemy-api-key",
+        help="Alchemy API key (or set ALCHEMY_RPC_API_KEY env)",
     )
     parser.add_argument(
         "--private-key",
@@ -134,11 +128,15 @@ def main():
     import os
 
     private_key = args.private_key or os.environ.get("PRIVATE_KEY")
+    alchemy_api_key = args.alchemy_api_key or os.environ.get("ALCHEMY_RPC_API_KEY")
+
+    if not alchemy_api_key:
+        print("ERROR: Alchemy API key required (--alchemy-api-key or ALCHEMY_RPC_API_KEY env)")
+        sys.exit(1)
 
     rpc_urls = {
-        "gnosis": args.gnosis_rpc or os.environ.get("GNOSIS_RPC"),
-        "ethereum": args.eth_rpc or os.environ.get("ETHEREUM_RPC"),
-        "base": args.base_rpc or os.environ.get("BASE_RPC"),
+        chain: ALCHEMY_RPC_BASE.format(network=config["alchemy_network"], api_key=alchemy_api_key)
+        for chain, config in CHAINS.items()
     }
 
     chains_to_run = list(CHAINS.keys()) if "all" in args.chains else args.chains

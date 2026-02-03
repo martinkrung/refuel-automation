@@ -34,9 +34,7 @@ jobs:
       - name: Run refuel
         env:
           PRIVATE_KEY: ${{ secrets.REFUEL_PRIVATE_KEY }}
-          GNOSIS_RPC: ${{ secrets.ALCHEMY_RPC_URL_GNOSIS }}
-          ETHEREUM_RPC: ${{ secrets.ALCHEMY_RPC_URL_ETHEREUM }}
-          BASE_RPC: ${{ secrets.ALCHEMY_RPC_URL_BASE }}
+          ALCHEMY_RPC_API_KEY: ${{ secrets.ALCHEMY_RPC_API_KEY }}
         run: |
           # Parse chains input
           CHAINS_ARG=""
