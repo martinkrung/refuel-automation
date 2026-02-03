@@ -136,9 +136,9 @@ def main():
     private_key = args.private_key or os.environ.get("PRIVATE_KEY")
 
     rpc_urls = {
-        "gnosis": args.gnosis_rpc or os.environ.get("GNOSIS_RPC_URL"),
-        "ethereum": args.eth_rpc or os.environ.get("ETH_RPC_URL"),
-        "base": args.base_rpc or os.environ.get("BASE_RPC_URL"),
+        "gnosis": args.gnosis_rpc or os.environ.get("GNOSIS_RPC"),
+        "ethereum": args.eth_rpc or os.environ.get("ETHEREUM_RPC"),
+        "base": args.base_rpc or os.environ.get("BASE_RPC"),
     }
 
     chains_to_run = list(CHAINS.keys()) if "all" in args.chains else args.chains
