@@ -13,7 +13,7 @@ on:
       chains:
         description: "Chains to refuel (comma-separated: gnosis,ethereum,base or all)"
         type: string
-        default: "gnosis,ethereum"
+        default: "all"
 
 jobs:
   refuel:
