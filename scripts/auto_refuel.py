@@ -90,16 +90,21 @@ def execute_refuel(chain: str, rpc_url: str, private_key: str, dry_run: bool) ->
 
     print("Executing streams...")
 
-    # Get current base fee and set max_fee as low as possible
-    latest_block = boa.env.evm.patch.get_block("latest")
-    base_fee = latest_block["baseFeePerGas"]
-    max_priority_fee = 1  # minimal priority, we don't care about speed
-    max_fee = base_fee + max_priority_fee  # just above base fee
-
-    print(f"Gas Fees: Base={base_fee / 1e9:.6f} Gwei | Max={max_fee / 1e9:.6f} Gwei | Priority={max_priority_fee / 1e9:.6f} Gwei")
+    # Get current base fee and set gas as low as possible
+    try:
+        latest_block = boa.env.evm.patch.get_block("latest")
+        base_fee = latest_block["baseFeePerGas"]
+        max_priority_fee = 1
+        max_fee = base_fee + max_priority_fee
+        print(f"Gas: Base={base_fee / 1e9:.6f} Gwei | Max={max_fee / 1e9:.6f} Gwei")
+        gas_kwargs = {"max_priority_fee": max_priority_fee, "max_fee": max_fee}
+    except Exception:
+        # Fallback: let boa use defaults
+        print("Gas: using defaults")
+        gas_kwargs = {}
 
     try:
-        tx = streamer.execute_many(list(due_ids), max_priority_fee=max_priority_fee, max_fee=max_fee)
+        tx = streamer.execute_many(list(due_ids), **gas_kwargs)
         print("Transaction successful!")
         print(f"Explorer: {config['explorer']}/tx/{tx.txhash.hex() if hasattr(tx, 'txhash') else 'pending'}")
         # Update balance after tx
