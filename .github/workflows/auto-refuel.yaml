@@ -27,9 +27,7 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-
-      - name: Install Python dependencies
-        run: uv sync --no-dev
+          cache-dependency-glob: "uv.lock"
 
       - name: Run refuel
         env:
@@ -50,4 +48,4 @@ jobs:
             DRY_FLAG="--dry-run"
           fi
 
-          uv run python scripts/refuel.py $CHAINS_ARG $DRY_FLAG
+          uv run scripts/refuel.py $CHAINS_ARG $DRY_FLAG

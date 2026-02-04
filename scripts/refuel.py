@@ -1,3 +1,9 @@
+# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#     "titanoboa==0.2.8",
+# ]
+# ///
 """
 Auto-refuel script for DonationStreamer contracts.
 Executes due streams across multiple chains.
