@@ -158,8 +158,13 @@ def main():
     print(f"StreamExecutor: {STREAM_EXECUTOR}")
     print(f"DonationStreamer: {DONATION_STREAMER}")
 
+    import time
+
     results = {}
-    for chain in chains_to_run:
+    for i, chain in enumerate(chains_to_run):
+        if i > 0:
+            time.sleep(1)
+
         rpc_url = rpc_urls.get(chain)
         if not rpc_url:
             print(f"\nWARNING: Skipping {chain} - no RPC URL configured")
