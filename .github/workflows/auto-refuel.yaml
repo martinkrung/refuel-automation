@@ -22,6 +22,10 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            contracts
+            scripts
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -34,18 +38,16 @@ jobs:
           PRIVATE_KEY: ${{ secrets.REFUEL_PRIVATE_KEY }}
           ALCHEMY_RPC_API_KEY: ${{ secrets.ALCHEMY_RPC_API_KEY }}
         run: |
-          # Parse chains input
-          CHAINS_ARG=""
+          ARGS=""
+
+          # Add chains if specified (convert comma to space)
           if [ -n "${{ inputs.chains }}" ] && [ "${{ inputs.chains }}" != "all" ]; then
-            # Convert comma-separated to space-separated
-            CHAINS_ARG="--chains $(echo '${{ inputs.chains }}' | tr ',' ' ')"
+            ARGS="--chains $(echo '${{ inputs.chains }}' | tr ',' ' ')"
           fi
 
-          # Handle dry run flag
-          DRY_FLAG=""
-          # For scheduled runs, never dry run; for manual runs, check input
+          # Add dry-run for manual runs only
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.dry_run }}" = "true" ]; then
-            DRY_FLAG="--dry-run"
+            ARGS="$ARGS --dry-run"
           fi
 
-          uv run scripts/auto_refuel.py $CHAINS_ARG $DRY_FLAG
+          uv run scripts/auto_refuel.py $ARGS

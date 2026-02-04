@@ -10,9 +10,11 @@ Executes due streams across multiple chains.
 """
 
 import argparse
+import os
 import sys
-
+import time
 import boa
+from eth_account import Account
 
 
 DONATION_STREAMER = "0x2b786BB995978CC2242C567Ae62fd617b0eBC828"
@@ -46,26 +48,24 @@ def get_streamer_contract():
     return boa.load_partial("contracts/DonationStreamer.vy").at(DONATION_STREAMER)
 
 
-def execute_refuel(chain: str, rpc_url: str, private_key: str, dry_run: bool) -> bool:
-    """Execute refuel for a single chain."""
+def execute_refuel(chain: str, rpc_url: str, private_key: str, dry_run: bool) -> tuple[bool, float | None]:
+    """Execute refuel for a single chain. Returns (success, balance)."""
     config = CHAINS[chain]
     print(f"\n{'='*60}")
     print(f"Chain: {chain.upper()} (ID: {config['chain_id']})")
     print(f"{'='*60}")
 
     boa.set_network_env(rpc_url)
+    balance = None
 
     if private_key:
-        from eth_account import Account
-
         account = Account.from_key(private_key)
         boa.env.add_account(account)
         boa.env.eoa = account.address
         print(f"Executor: {account.address}")
-        balance = boa.env.get_balance(account.address)
-        print(f"Balance: {balance / 1e18:.6f} native")
+        balance = boa.env.get_balance(account.address) / 1e18
+        print(f"Balance: {balance:.6f} native")
     else:
-        # Set a dummy EOA for read-only operations
         boa.env.eoa = "0x0000000000000000000000000000000000000000"
 
     streamer = get_streamer_contract()
@@ -73,7 +73,7 @@ def execute_refuel(chain: str, rpc_url: str, private_key: str, dry_run: bool) ->
 
     if not due_ids:
         print("No streams due for execution.")
-        return True
+        return True, balance
 
     total_reward = sum(rewards)
     print(f"Due streams: {len(due_ids)}")
@@ -82,11 +82,11 @@ def execute_refuel(chain: str, rpc_url: str, private_key: str, dry_run: bool) ->
 
     if dry_run:
         print("[DRY RUN] Would execute streams, skipping actual transaction.")
-        return True
+        return True, balance
 
     if not private_key:
         print("ERROR: Private key required for execution (non-dry-run mode).")
-        return False
+        return False, balance
 
     print("Executing streams...")
 
@@ -102,10 +102,12 @@ def execute_refuel(chain: str, rpc_url: str, private_key: str, dry_run: bool) ->
         tx = streamer.execute_many(list(due_ids), max_priority_fee=max_priority_fee, max_fee=max_fee)
         print("Transaction successful!")
         print(f"Explorer: {config['explorer']}/tx/{tx.txhash.hex() if hasattr(tx, 'txhash') else 'pending'}")
-        return True
+        # Update balance after tx
+        balance = boa.env.get_balance(account.address) / 1e18
+        return True, balance
     except Exception as e:
         print(f"ERROR: Transaction failed: {e}")
-        return False
+        return False, balance
 
 
 def main():
@@ -132,8 +134,6 @@ def main():
     )
     args = parser.parse_args()
 
-    import os
-
     private_key = args.private_key or os.environ.get("PRIVATE_KEY")
     alchemy_api_key = args.alchemy_api_key or os.environ.get("ALCHEMY_RPC_API_KEY")
 
@@ -155,9 +155,8 @@ def main():
     print(f"Chains: {', '.join(chains_to_run)}")
     print(f"DonationStreamer: {DONATION_STREAMER}")
 
-    import time
-
     results = {}
+    balances = {}
     for i, chain in enumerate(chains_to_run):
         if i > 0:
             time.sleep(1)
@@ -169,8 +168,9 @@ def main():
             continue
 
         try:
-            success = execute_refuel(chain, rpc_url, private_key, args.dry_run)
+            success, balance = execute_refuel(chain, rpc_url, private_key, args.dry_run)
             results[chain] = success
+            balances[chain] = balance
         except Exception as e:
             print(f"\nERROR on {chain}: {e}")
             results[chain] = False
@@ -189,29 +189,19 @@ def main():
 
     print("\nAll configured chains processed successfully.")
 
-    # Check balances at the end and warn if low
+    # Check balances (already collected during execution)
     print("\n" + "=" * 60)
     print("BALANCE CHECK")
     print("=" * 60)
     low_balance_chains = []
-    for chain in chains_to_run:
-        rpc_url = rpc_urls.get(chain)
-        if not rpc_url:
+    for chain, balance in balances.items():
+        if balance is None:
             continue
-
-        config = CHAINS[chain]
-        boa.set_network_env(rpc_url)
-
-        if private_key:
-            from eth_account import Account
-
-            account = Account.from_key(private_key)
-            balance = boa.env.get_balance(account.address) / 1e18
-            min_bal = config["min_balance"]
-            status = "OK" if balance >= min_bal else "LOW"
-            print(f"  {chain}: {balance:.6f} (min: {min_bal}) [{status}]")
-            if balance < min_bal:
-                low_balance_chains.append(chain)
+        min_bal = CHAINS[chain]["min_balance"]
+        status = "OK" if balance >= min_bal else "LOW"
+        print(f"  {chain}: {balance:.6f} (min: {min_bal}) [{status}]")
+        if balance < min_bal:
+            low_balance_chains.append(chain)
 
     if low_balance_chains:
         print(f"\nWARNING: Low balance on: {', '.join(low_balance_chains)}")
