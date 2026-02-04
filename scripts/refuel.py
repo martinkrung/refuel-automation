@@ -15,7 +15,6 @@ import sys
 import boa
 
 
-STREAM_EXECUTOR = "0x4a8cc5cb8f7242be9944e1313793c2e5411c462a"
 DONATION_STREAMER = "0x2b786BB995978CC2242C567Ae62fd617b0eBC828"
 
 ALCHEMY_RPC_BASE = "https://{network}-mainnet.g.alchemy.com/v2/{api_key}"
@@ -39,20 +38,9 @@ CHAINS = {
 }
 
 
-def get_executor_contract():
-    """Load StreamExecutor contract interface."""
-    return boa.load_partial("contracts/StreamExecutor.vy").at(STREAM_EXECUTOR)
-
-
 def get_streamer_contract():
     """Load DonationStreamer contract interface."""
     return boa.load_partial("contracts/DonationStreamer.vy").at(DONATION_STREAMER)
-
-
-def check_due_streams(streamer) -> tuple[list[int], list[int]]:
-    """Check for due streams and their rewards."""
-    due_ids, rewards = streamer.streams_and_rewards_due()
-    return list(due_ids), list(rewards)
 
 
 def execute_refuel(chain: str, rpc_url: str, private_key: str, dry_run: bool) -> bool:
@@ -78,7 +66,7 @@ def execute_refuel(chain: str, rpc_url: str, private_key: str, dry_run: bool) ->
         boa.env.eoa = "0x0000000000000000000000000000000000000000"
 
     streamer = get_streamer_contract()
-    due_ids, rewards = check_due_streams(streamer)
+    due_ids, rewards = streamer.streams_and_rewards_due()
 
     if not due_ids:
         print("No streams due for execution.")
@@ -86,7 +74,7 @@ def execute_refuel(chain: str, rpc_url: str, private_key: str, dry_run: bool) ->
 
     total_reward = sum(rewards)
     print(f"Due streams: {len(due_ids)}")
-    print(f"Stream IDs: {due_ids}")
+    print(f"Stream IDs: {list(due_ids)}")
     print(f"Total reward: {total_reward / 1e18:.6f} native")
 
     if dry_run:
@@ -97,12 +85,19 @@ def execute_refuel(chain: str, rpc_url: str, private_key: str, dry_run: bool) ->
         print("ERROR: Private key required for execution (non-dry-run mode).")
         return False
 
-    executor = get_executor_contract()
     print("Executing streams...")
 
+    # Get current base fee and set max_fee as low as possible
+    latest_block = boa.env.evm.patch.get_block("latest")
+    base_fee = latest_block["baseFeePerGas"]
+    max_priority_fee = 1  # minimal priority, we don't care about speed
+    max_fee = base_fee + max_priority_fee  # just above base fee
+
+    print(f"Gas Fees: Base={base_fee / 1e9:.6f} Gwei | Max={max_fee / 1e9:.6f} Gwei | Priority={max_priority_fee / 1e9:.6f} Gwei")
+
     try:
-        tx = executor.execute()
-        print(f"Transaction successful!")
+        tx = streamer.execute_many(list(due_ids), max_priority_fee=max_priority_fee, max_fee=max_fee)
+        print("Transaction successful!")
         print(f"Explorer: {config['explorer']}/tx/{tx.txhash.hex() if hasattr(tx, 'txhash') else 'pending'}")
         return True
     except Exception as e:
@@ -155,7 +150,6 @@ def main():
     print("=" * 60)
     print(f"Mode: {'DRY RUN' if args.dry_run else 'LIVE'}")
     print(f"Chains: {', '.join(chains_to_run)}")
-    print(f"StreamExecutor: {STREAM_EXECUTOR}")
     print(f"DonationStreamer: {DONATION_STREAMER}")
 
     import time
