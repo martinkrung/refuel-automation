@@ -2,8 +2,8 @@ name: Auto Refuel
 
 on:
   schedule:
-    # Run every 6 hours
-    - cron: "0 */1 * * *"
+    # Run every 1 hours
+    - cron: "19 */1 * * *"
   workflow_dispatch:
     inputs:
       dry_run:
