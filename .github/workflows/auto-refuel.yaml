@@ -48,4 +48,4 @@ jobs:
             DRY_FLAG="--dry-run"
           fi
 
-          uv run scripts/refuel.py $CHAINS_ARG $DRY_FLAG
+          uv run scripts/auto_refuel.py $CHAINS_ARG $DRY_FLAG
