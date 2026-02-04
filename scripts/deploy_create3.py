@@ -45,9 +45,9 @@ def main() -> None:
     if not api_key:
         raise ValueError("ETHERSCAN_API_KEY is required")
 
-    encrypted_key = os.environ.get("ENCRYPTED_PK")
+    encrypted_key = os.environ.get("ENCRYPTED_PRIVATE_KEY")
     if not encrypted_key:
-        raise ValueError("ENCRYPTED_PK is required")
+        raise ValueError("ENCRYPTED_PRIVATE_KEY is required")
 
     private_key = decrypt_private_key(encrypted_key, getpass())
     deployer = Account.from_key(private_key)
