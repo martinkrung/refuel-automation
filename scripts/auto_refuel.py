@@ -24,16 +24,19 @@ CHAINS = {
         "chain_id": 100,
         "alchemy_network": "gnosis",
         "explorer": "https://gnosisscan.io",
+        "min_balance": 0.01,  # xDAI
     },
     "ethereum": {
         "chain_id": 1,
         "alchemy_network": "eth",
         "explorer": "https://etherscan.io",
+        "min_balance": 0.0001,  # ETH
     },
     "base": {
         "chain_id": 8453,
         "alchemy_network": "base",
         "explorer": "https://basescan.org",
+        "min_balance": 0.0001,  # ETH one call ~ 0.00002 ETH
     },
 }
 
@@ -185,6 +188,34 @@ def main():
         sys.exit(1)
 
     print("\nAll configured chains processed successfully.")
+
+    # Check balances at the end and warn if low
+    print("\n" + "=" * 60)
+    print("BALANCE CHECK")
+    print("=" * 60)
+    low_balance_chains = []
+    for chain in chains_to_run:
+        rpc_url = rpc_urls.get(chain)
+        if not rpc_url:
+            continue
+
+        config = CHAINS[chain]
+        boa.set_network_env(rpc_url)
+
+        if private_key:
+            from eth_account import Account
+
+            account = Account.from_key(private_key)
+            balance = boa.env.get_balance(account.address) / 1e18
+            min_bal = config["min_balance"]
+            status = "OK" if balance >= min_bal else "LOW"
+            print(f"  {chain}: {balance:.6f} (min: {min_bal}) [{status}]")
+            if balance < min_bal:
+                low_balance_chains.append(chain)
+
+    if low_balance_chains:
+        print(f"\nWARNING: Low balance on: {', '.join(low_balance_chains)}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
