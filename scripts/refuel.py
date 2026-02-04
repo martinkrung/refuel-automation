@@ -67,6 +67,9 @@ def execute_refuel(chain: str, rpc_url: str, private_key: str, dry_run: bool) ->
         print(f"Executor: {account.address}")
         balance = boa.env.get_balance(account.address)
         print(f"Balance: {balance / 1e18:.6f} native")
+    else:
+        # Set a dummy EOA for read-only operations
+        boa.env.eoa = "0x0000000000000000000000000000000000000000"
 
     streamer = get_streamer_contract()
     due_ids, rewards = check_due_streams(streamer)
