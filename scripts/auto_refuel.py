@@ -104,9 +104,11 @@ def execute_refuel(chain: str, rpc_url: str, private_key: str, dry_run: bool) ->
         gas_kwargs = {}
 
     try:
-        tx = streamer.execute_many(list(due_ids), **gas_kwargs)
-        print("Transaction successful!")
-        print(f"Explorer: {config['explorer']}/tx/{tx.txhash.hex() if hasattr(tx, 'txhash') else 'pending'}")
+        result = streamer.execute_many(list(due_ids), **gas_kwargs)
+        # tx hash is in boa.env.last_receipt or printed by boa
+        tx_hash = getattr(boa.env, "last_receipt", {}).get("transactionHash", "")
+        if tx_hash:
+            print(f"Explorer: {config['explorer']}/tx/{tx_hash.hex()}")
         # Update balance after tx
         balance = boa.env.get_balance(account.address) / 1e18
         return True, balance
