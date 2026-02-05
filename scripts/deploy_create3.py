@@ -43,9 +43,9 @@ def _guarded_salt(deployer: str, chain_id: int, salt: bytes) -> bytes:
 def main() -> None:
     api_key = os.environ.get("ETHERSCAN_API_KEY")
     if not api_key:
-        raise ValueError("ENCRYPTED_PK is required")
+        raise ValueError("ETHERSCAN_API_KEY is required")
 
-    encrypted_key = os.environ.get("ENCRYPTED_PRIVATE_KEY")
+    encrypted_key = os.environ.get("ENCRYPTED_PK")
     if not encrypted_key:
         raise ValueError("ENCRYPTED_PK is required")
 
