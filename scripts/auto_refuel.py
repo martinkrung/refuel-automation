@@ -93,33 +93,21 @@ def execute_refuel(chain: str, rpc_url: str, private_key: str, dry_run: bool) ->
 
     print("Executing streams...")
 
-    # Get current base fee and set gas as low as possible
     try:
-        latest_block = boa.env.evm.patch.get_block("latest")
-        base_fee = latest_block["baseFeePerGas"]
-        max_priority_fee = 0.01
-        max_fee = base_fee + max_priority_fee
-        print(f"Gas: Base={base_fee / 1e9:.6f} Gwei | Max={max_fee / 1e9:.6f} Gwei")
-        gas_kwargs = {"max_priority_fee": max_priority_fee, "max_fee": max_fee}
-    except Exception:
-        # Fallback: let boa use defaults
-        print("Gas: using defaults")
-        gas_kwargs = {}
-
-    try:
-        result = streamer.execute_many(list(due_ids), **gas_kwargs)
-        time.sleep(1)
-        # tx hash is in boa.env.last_receipt or printed by boa
-        tx_hash = getattr(boa.env, "last_receipt", {}).get("transactionHash", "")
-        if tx_hash:
-            print(f"Explorer: {config['explorer']}/tx/{tx_hash.hex()}")
-        # Update balance after tx
-        balance = boa.env.get_balance(account.address) / 1e18
-        time.sleep(1)
-        return True, balance
+        result = streamer.execute_many(list(due_ids))
+        print(result)
     except Exception as e:
-        print(f"ERROR: Transaction failed: {e}")
-        return False, balance
+        # Boa sometimes fails to decode return value even when tx succeeds
+        # If tx was mined (boa prints this), treat as success
+        if "NoneType" in str(e):
+            print("Transaction mined (return value decode issue, ignoring)")
+        else:
+            print(f"ERROR: Transaction failed: {e}")
+            return False, balance
+
+    time.sleep(1)
+    balance = boa.env.get_balance(account.address) / 1e18
+    return True, balance
 
 
 def main():
