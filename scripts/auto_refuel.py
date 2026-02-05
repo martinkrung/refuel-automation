@@ -65,11 +65,14 @@ def execute_refuel(chain: str, rpc_url: str, private_key: str, dry_run: bool) ->
         print(f"Executor: {account.address}")
         balance = boa.env.get_balance(account.address) / 1e18
         print(f"Balance: {balance:.6f} native")
+        time.sleep(1)
     else:
         boa.env.eoa = "0x0000000000000000000000000000000000000000"
 
     streamer = get_streamer_contract()
+    time.sleep(1)
     due_ids, rewards = streamer.streams_and_rewards_due()
+    time.sleep(1)
 
     if not due_ids:
         print("No streams due for execution.")
@@ -94,7 +97,7 @@ def execute_refuel(chain: str, rpc_url: str, private_key: str, dry_run: bool) ->
     try:
         latest_block = boa.env.evm.patch.get_block("latest")
         base_fee = latest_block["baseFeePerGas"]
-        max_priority_fee = 1
+        max_priority_fee = 0.01
         max_fee = base_fee + max_priority_fee
         print(f"Gas: Base={base_fee / 1e9:.6f} Gwei | Max={max_fee / 1e9:.6f} Gwei")
         gas_kwargs = {"max_priority_fee": max_priority_fee, "max_fee": max_fee}
@@ -105,12 +108,14 @@ def execute_refuel(chain: str, rpc_url: str, private_key: str, dry_run: bool) ->
 
     try:
         result = streamer.execute_many(list(due_ids), **gas_kwargs)
+        time.sleep(1)
         # tx hash is in boa.env.last_receipt or printed by boa
         tx_hash = getattr(boa.env, "last_receipt", {}).get("transactionHash", "")
         if tx_hash:
             print(f"Explorer: {config['explorer']}/tx/{tx_hash.hex()}")
         # Update balance after tx
         balance = boa.env.get_balance(account.address) / 1e18
+        time.sleep(1)
         return True, balance
     except Exception as e:
         print(f"ERROR: Transaction failed: {e}")
