@@ -105,8 +105,13 @@ def execute_refuel(chain: str, rpc_url: str, private_key: str, dry_run: bool) ->
             print(f"ERROR: Transaction failed: {e}")
             return False, balance
 
-    time.sleep(1)
-    balance = boa.env.get_balance(account.address) / 1e18
+    # Wait for RPC to settle, then update balance
+    time.sleep(15)
+    try:
+        balance = boa.env.get_balance(account.address) / 1e18
+    except Exception:
+        pass  # Keep the old balance
+
     return True, balance
 
 
