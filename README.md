@@ -1,6 +1,6 @@
 # refuel-automation
 
-## github actions to execute the due streamers
+## github actions to execute the due refuel streams
 
 Needs two secrets in repo's `/settings/secrets/actions`
 
